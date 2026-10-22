@@ -21,6 +21,10 @@ class Payment(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     reference = models.CharField(max_length=100, blank=True, help_text="Card slip / bank / cheque reference")
     received_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True)
+    debt_payment = models.ForeignKey(
+        "customers.DebtPayment", on_delete=models.CASCADE, null=True, blank=True, related_name="allocations",
+        help_text="Set when this payment is a share of a customer's debt repayment",
+    )
 
     # M-Pesa specific fields
     phone_number = models.CharField(max_length=20, blank=True)

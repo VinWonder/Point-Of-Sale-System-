@@ -54,6 +54,7 @@ def record_debt_payment(customer, amount, user, method=DebtPayment.Method.CASH, 
         Payment.objects.create(
             sale=sale, method=payment_method, amount=portion, status=Payment.Status.SUCCESS,
             reference=reference or f'Debt payment #{debt_payment.pk}', received_by=user,
+            debt_payment=debt_payment,
         )
         sale.refresh_payment_status()
         sale.save(update_fields=['payment_status', 'amount_paid'])
