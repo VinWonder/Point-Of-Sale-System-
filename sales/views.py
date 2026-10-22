@@ -12,7 +12,8 @@ from django.views.decorators.http import require_POST
 from accounts.audit import log_action
 from core.models import ShopSettings
 from customers.models import Customer
-from inventory.models import Product
+from inventory.models import Category, Product, Stock
+from payments.mpesa import simulation_enabled
 from .models import Sale, Quotation, QuotationItem
 from .services import SaleError, checkout, parse_lines
 
@@ -26,9 +27,45 @@ def _json_body(request):
 
 @login_required
 def pos_screen(request):
-    products = Product.objects.filter(is_active=True)
-    customers = Customer.objects.all().order_by('name')
-    return render(request, 'sales/pos.html', {'products': products, 'customers': customers})
+    """The till. Products carry this branch's stock so the cashier sees what can be sold."""
+    branch = request.user.branch
+    stock_by_product = dict(
+        Stock.objects.filter(branch=branch).values_list('product_id', 'quantity')
+    ) if branch else {}
+    products = [
+        {
+            'id': p.id, 'name': p.name, 'sku': p.sku, 'barcode': p.barcode, 'brand': p.brand,
+            'unit': p.unit, 'category': p.category_id,
+            'price': float(p.sell_price),
+            'wholesale_price': float(p.wholesale_price) if p.wholesale_price else None,
+            'wholesale_min_qty': p.wholesale_min_qty,
+            'stock': stock_by_product.get(p.id, 0),
+        }
+        for p in Product.objects.filter(is_active=True).order_by('name')
+    ]
+    customers = [
+        {
+            'id': c.id, 'name': c.name, 'phone': c.phone_number, 'type': c.get_customer_type_display(),
+            'balance': float(c.balance_owed), 'limit': float(c.credit_limit),
+            'available': float(c.available_credit), 'blocked': c.is_defaulter,
+        }
+        for c in Customer.objects.filter(is_active=True).order_by('name')
+    ]
+    categories = list(
+        Category.objects.filter(product__is_active=True).distinct().order_by('name').values('id', 'name')
+    )
+    settings = ShopSettings.load()
+    return render(request, 'sales/pos.html', {
+        'products_data': products,
+        'customers_data': customers,
+        'categories_data': categories,
+        'pos_config': {
+            'maxCashierDiscount': float(settings.max_cashier_discount_percent),
+            'isCashier': request.user.role == 'CASHIER',
+            'mpesaSimulation': simulation_enabled(),
+            'hasBranch': bool(branch),
+        },
+    })
 
 
 @login_required

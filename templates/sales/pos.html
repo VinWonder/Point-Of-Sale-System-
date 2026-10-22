@@ -1,199 +1,212 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}POS Checkout{% endblock %}
+{% block page_title %}Point of Sale{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/pos-screen.css' %}">{% endblock %}
 {% block content %}
-<div x-data="posCart()" class="row g-3">
+{{ products_data|json_script:"products-data" }}
+{{ customers_data|json_script:"customers-data" }}
+{{ categories_data|json_script:"categories-data" }}
+{{ pos_config|json_script:"pos-config" }}
 
-    <!-- Product picker -->
-    <div class="col-md-7">
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <input type="text" x-model="search" class="form-control"
-                       placeholder="Scan barcode or search product...">
+<div x-data="posCart()" x-init="init()" data-pos-screen class="pos-grid">
+
+    {% if not pos_config.hasBranch %}
+    <div class="alert alert-warning pos-full">Your account is not assigned to a branch, so you cannot sell yet. Ask a manager to assign you.</div>
+    {% endif %}
+
+    <!-- ============ Product picker ============ -->
+    <section class="card pos-products">
+        <div class="card-header bg-white">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white"><i class="bi bi-upc-scan"></i></span>
+                <input type="text" x-ref="search" x-model="search" @keydown.enter.prevent="scanOrAddFirst()"
+                       @keydown.escape="search = ''" class="form-control" autocomplete="off"
+                       placeholder="Scan barcode or type product name / SKU  (F3)">
             </div>
-            <div class="card-body" style="max-height: 500px; overflow-y:auto;">
-                <table class="table table-hover">
-                    <thead><tr><th>Product</th><th>SKU</th><th>Price</th><th></th></tr></thead>
-                    <tbody>
-                        {% for p in products %}
-                        <tr x-show="matches('{{ p.name|escapejs }}', '{{ p.sku|escapejs }}')">
-                            <td>{{ p.name }}</td>
-                            <td>{{ p.sku }}</td>
-                            <td>KES {{ p.sell_price }}</td>
-                            <td>
-                                <button class="btn btn-sm btn-primary"
-                                    @click="addItem({{ p.id }}, '{{ p.name|escapejs }}', {{ p.sell_price }})">
-                                    Add
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="category-chips mt-2">
+                <button type="button" class="chip" :class="{active: category === null}" @click="category = null">All</button>
+                <template x-for="c in categories" :key="c.id">
+                    <button type="button" class="chip" :class="{active: category === c.id}" @click="category = c.id" x-text="c.name"></button>
+                </template>
             </div>
         </div>
-    </div>
+        <div class="card-body product-list">
+            <template x-for="p in filteredProducts()" :key="p.id">
+                <button type="button" class="product-tile" :class="{'out-of-stock': p.stock <= 0}"
+                        :disabled="p.stock <= 0" @click="addItem(p)">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="text-start">
+                            <div class="fw-semibold" x-text="p.name"></div>
+                            <div class="small text-muted"><span x-text="p.sku"></span><span x-show="p.brand"> · <span x-text="p.brand"></span></span></div>
+                        </div>
+                        <div class="text-end">
+                            <div class="fw-bold text-nowrap" x-text="money(p.price)"></div>
+                            <div class="small text-muted" x-show="p.wholesale_price" x-text="money(p.wholesale_price) + ' @ ' + p.wholesale_min_qty + '+'"></div>
+                        </div>
+                    </div>
+                    <div class="small mt-1" :class="p.stock <= 0 ? 'text-danger' : (p.stock <= 5 ? 'text-warning' : 'text-success')">
+                        <i class="bi bi-box"></i> <span x-text="p.stock <= 0 ? 'Out of stock' : p.stock + ' ' + p.unit + ' in stock'"></span>
+                    </div>
+                </button>
+            </template>
+            <div class="text-center text-muted py-5" x-show="filteredProducts().length === 0">No products match "<span x-text="search"></span>".</div>
+        </div>
+    </section>
 
-    <!-- Cart / checkout -->
-    <div class="col-md-5">
-        <div class="card shadow-sm">
-            <div class="card-header">Cart</div>
-            <div class="card-body">
-
-                <div class="mb-2">
-                    <label class="form-label">Customer (optional for cash, required for credit)</label>
-                    <select x-model="customerId" class="form-select">
-                        <option value="">Walk-in customer</option>
-                        {% for c in customers %}
-                        <option value="{{ c.id }}" {% if c.is_defaulter %}data-defaulter="1"{% endif %}>
-                            {{ c.name }} {% if c.is_defaulter %}(OWES KES {{ c.balance_owed }} - BLOCKED){% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <table class="table">
-                    <tbody>
-                        <template x-for="item in cart" :key="item.id">
-                            <tr>
-                                <td x-text="item.name"></td>
-                                <td>
-                                    <input type="number" min="1" x-model.number="item.qty" class="form-control form-control-sm" style="width:70px">
-                                </td>
-                                <td x-text="'KES ' + (item.qty * item.price)"></td>
-                                <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(item.id)">x</button></td>
-                            </tr>
+    <!-- ============ Cart & payment ============ -->
+    <section class="card pos-cart">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-cart3"></i> Cart <span class="badge text-bg-dark" x-text="itemCount()"></span></span>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" @click="holdSale()" :disabled="!cart.length" title="Park this sale"><i class="bi bi-pause-circle"></i> Hold</button>
+                <div class="btn-group btn-group-sm" x-show="held.length">
+                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                        Held <span class="badge text-bg-warning" x-text="held.length"></span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <template x-for="(h, idx) in held" :key="h.at">
+                            <li><a class="dropdown-item small" href="#" @click.prevent="recallSale(idx)">
+                                <span x-text="h.label"></span> — <span x-text="money(h.total)"></span>
+                            </a></li>
                         </template>
-                    </tbody>
-                </table>
-                <h5 class="text-end">Total: KES <span x-text="total()"></span></h5>
-
-                <div class="mb-2">
-                    <label class="form-label">Customer Phone (for M-Pesa)</label>
-                    <input type="text" x-model="phone" class="form-control" placeholder="2547XXXXXXXX">
+                    </ul>
                 </div>
-
-                <div class="d-grid gap-2">
-                    <button class="btn btn-success" @click="checkout('CASH')" :disabled="loading">Complete Sale (Cash)</button>
-                    <button class="btn btn-primary" @click="checkout('MPESA')" :disabled="loading">Pay with M-Pesa (STK Push)</button>
-                    <button class="btn btn-warning" @click="checkout('CREDIT')" :disabled="loading">Sell on Credit (Account)</button>
-                    <button class="btn btn-outline-secondary" @click="saveQuotation()" :disabled="loading">Save as Quotation</button>
-                </div>
-
-                <div class="alert alert-danger mt-3" x-show="errorMessage" x-text="errorMessage"></div>
-                <div class="alert alert-info mt-3" x-show="statusMessage" x-text="statusMessage"></div>
+                <button type="button" class="btn btn-outline-danger" @click="clearCart()" :disabled="!cart.length"><i class="bi bi-trash"></i></button>
             </div>
         </div>
-    </div>
+
+        <div class="card-body">
+            <!-- Customer -->
+            <div class="mb-2 position-relative">
+                <template x-if="!customer">
+                    <div>
+                        <input type="text" class="form-control" x-model="customerSearch" @focus="showCustomers = true"
+                               @click.outside="showCustomers = false" placeholder="Walk-in customer — search name or phone to attach">
+                        <div class="customer-results shadow" x-show="showCustomers && customerSearch.length > 0">
+                            <template x-for="c in filteredCustomers()" :key="c.id">
+                                <button type="button" class="dropdown-item" @click="selectCustomer(c)">
+                                    <div class="d-flex justify-content-between">
+                                        <span><strong x-text="c.name"></strong> <small class="text-muted" x-text="c.phone"></small></span>
+                                        <span class="badge" :class="c.blocked ? 'bg-danger' : 'bg-light text-dark'" x-text="c.blocked ? 'BLOCKED' : c.type"></span>
+                                    </div>
+                                </button>
+                            </template>
+                            <div class="dropdown-item text-muted small" x-show="filteredCustomers().length === 0">No customer found.</div>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="customer">
+                    <div class="customer-card" :class="{'blocked': customer.blocked}">
+                        <div class="d-flex justify-content-between">
+                            <div><strong x-text="customer.name"></strong> <small class="text-muted" x-text="customer.phone"></small></div>
+                            <button type="button" class="btn-close btn-sm" @click="customer = null; customerSearch = ''"></button>
+                        </div>
+                        <div class="small">
+                            Owes <strong x-text="money(customer.balance)"></strong> ·
+                            Credit available <strong x-text="money(customer.available)"></strong>
+                        </div>
+                        <div class="small text-danger fw-semibold" x-show="customer.blocked">Over credit limit — must clear balance before buying.</div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Lines -->
+            <div class="cart-lines">
+                <template x-for="item in cart" :key="item.id">
+                    <div class="cart-line">
+                        <div class="flex-grow-1 min-w-0">
+                            <div class="fw-semibold text-truncate" x-text="item.name"></div>
+                            <div class="small text-muted">
+                                <span x-text="money(unitPrice(item))"></span> / <span x-text="item.unit"></span>
+                                <span class="badge bg-info-subtle text-info-emphasis" x-show="isWholesale(item)">wholesale</span>
+                            </div>
+                        </div>
+                        <div class="qty-control">
+                            <button type="button" class="btn btn-sm btn-light" @click="changeQty(item, -1)">−</button>
+                            <input type="number" min="1" :max="item.stock" class="form-control form-control-sm text-center"
+                                   x-model.number="item.qty" @change="clampQty(item)">
+                            <button type="button" class="btn btn-sm btn-light" @click="changeQty(item, 1)">+</button>
+                        </div>
+                        <div class="line-total fw-semibold" x-text="money(lineTotal(item))"></div>
+                        <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="removeItem(item.id)"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </template>
+                <div class="text-center text-muted py-4" x-show="!cart.length">
+                    <i class="bi bi-upc-scan fs-1 d-block mb-2"></i>Scan or tap a product to start a sale
+                </div>
+            </div>
+
+            <!-- Totals -->
+            <div class="totals">
+                <div class="d-flex justify-content-between"><span>Subtotal</span><span x-text="money(subtotal())"></span></div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>Discount <small class="text-muted" x-show="config.isCashier">(max <span x-text="config.maxCashierDiscount"></span>%)</small></span>
+                    <input type="number" min="0" step="1" x-model.number="discount" class="form-control form-control-sm text-end" style="width: 110px">
+                </div>
+                <div class="d-flex justify-content-between grand-total"><span>TOTAL</span><span x-text="money(total())"></span></div>
+            </div>
+
+            <!-- Payment -->
+            <ul class="nav nav-pills nav-fill pay-tabs mb-2">
+                <li class="nav-item"><button type="button" class="nav-link" :class="{active: method === 'CASH'}" @click="method = 'CASH'"><i class="bi bi-cash-stack"></i> Cash</button></li>
+                <li class="nav-item"><button type="button" class="nav-link" :class="{active: method === 'MPESA'}" @click="method = 'MPESA'; prefillPhone()"><i class="bi bi-phone"></i> M-Pesa</button></li>
+                <li class="nav-item"><button type="button" class="nav-link" :class="{active: method === 'CARD'}" @click="method = 'CARD'"><i class="bi bi-credit-card"></i> Card</button></li>
+                <li class="nav-item"><button type="button" class="nav-link" :class="{active: method === 'CREDIT'}" @click="method = 'CREDIT'"><i class="bi bi-journal-text"></i> Credit</button></li>
+            </ul>
+
+            <div x-show="method === 'CASH'" class="mb-2">
+                <div class="input-group">
+                    <span class="input-group-text">Tendered</span>
+                    <input type="number" min="0" x-model.number="tendered" class="form-control form-control-lg text-end" placeholder="0">
+                </div>
+                <div class="quick-cash mt-1">
+                    <template x-for="amt in quickCash()" :key="amt">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @click="tendered = amt" x-text="amt.toLocaleString()"></button>
+                    </template>
+                </div>
+                <div class="change-due mt-2" x-show="tendered >= total() && tendered > 0">
+                    Change: <strong x-text="money(tendered - total())"></strong>
+                </div>
+            </div>
+            <div x-show="method === 'MPESA'" class="mb-2">
+                <input type="tel" x-model="phone" class="form-control form-control-lg" placeholder="Customer phone e.g. 0712 345 678">
+                <div class="small text-muted mt-1" x-show="config.mpesaSimulation"><i class="bi bi-info-circle"></i> Demo mode: no Daraja credentials, payments are simulated.</div>
+            </div>
+            <div x-show="method === 'CREDIT'" class="small mb-2" :class="customer ? 'text-muted' : 'text-danger'">
+                <span x-show="!customer">Attach a customer to sell on account.</span>
+                <span x-show="customer">Charged to <strong x-text="customer && customer.name"></strong>'s account.</span>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-accent btn-lg" @click="checkout()" :disabled="loading || !cart.length || (customer && customer.blocked)">
+                    <span x-show="!loading"><i class="bi bi-check2-circle"></i> Complete Sale <kbd>F4</kbd></span>
+                    <span x-show="loading"><span class="spinner-border spinner-border-sm"></span> Processing…</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" @click="saveQuotation()" :disabled="loading || !cart.length">
+                    <i class="bi bi-file-earmark-text"></i> Save as Quotation
+                </button>
+            </div>
+
+            <div class="alert alert-danger mt-3 mb-0" x-show="errorMessage" x-text="errorMessage"></div>
+            <div class="alert alert-info mt-3 mb-0" x-show="statusMessage">
+                <div x-text="statusMessage"></div>
+                <div class="mt-2 d-flex gap-2" x-show="pendingPaymentId && config.mpesaSimulation">
+                    <button type="button" class="btn btn-sm btn-success" @click="simulate('success')">Simulate: customer paid</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @click="simulate('cancel')">Simulate: cancelled</button>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function posCart() {
-    return {
-        search: '',
-        cart: [],
-        phone: '',
-        customerId: '',
-        loading: false,
-        statusMessage: '',
-        errorMessage: '',
-
-        matches(name, sku) {
-            if (!this.search) return true;
-            const q = this.search.toLowerCase();
-            return name.toLowerCase().includes(q) || sku.toLowerCase().includes(q);
-        },
-        addItem(id, name, price) {
-            const existing = this.cart.find(i => i.id === id);
-            if (existing) { existing.qty += 1; }
-            else { this.cart.push({ id, name, price, qty: 1 }); }
-        },
-        removeItem(id) {
-            this.cart = this.cart.filter(i => i.id !== id);
-        },
-        total() {
-            return this.cart.reduce((sum, i) => sum + i.qty * i.price, 0);
-        },
-        getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-        },
-        async saveQuotation() {
-            this.errorMessage = ''; this.statusMessage = '';
-            if (this.cart.length === 0) { this.errorMessage = 'Cart is empty.'; return; }
-            const res = await fetch("{% url 'sales:create_quotation' %}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': this.getCookie('csrftoken')},
-                body: JSON.stringify({
-                    customer_id: this.customerId || null,
-                    items: this.cart.map(i => ({ product_id: i.id, qty: i.qty })),
-                }),
-            });
-            const data = await res.json();
-            if (data.quotation_id) {
-                window.location.href = `/sales/quotation/${data.quotation_id}/`;
-            } else {
-                this.errorMessage = data.error || 'Could not save quotation.';
-            }
-        },
-        async checkout(method) {
-            this.errorMessage = ''; this.statusMessage = '';
-            if (this.cart.length === 0) { this.errorMessage = 'Cart is empty.'; return; }
-            if (method === 'CREDIT' && !this.customerId) {
-                this.errorMessage = 'Select a customer for a credit/account sale.'; return;
-            }
-            this.loading = true;
-
-            const res = await fetch("{% url 'sales:create_sale' %}", {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': this.getCookie('csrftoken')},
-                body: JSON.stringify({
-                    customer_id: this.customerId || null,
-                    items: this.cart.map(i => ({ product_id: i.id, qty: i.qty })),
-                    payment_method: method,
-                }),
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                this.errorMessage = data.error || 'Sale could not be completed.';
-                this.loading = false;
-                return;
-            }
-
-            if (method === 'MPESA') {
-                this.statusMessage = 'Sending STK push... ask the customer to check their phone.';
-                const mpesaRes = await fetch(`/payments/mpesa/initiate/${data.sale_id}/`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': this.getCookie('csrftoken')},
-                    body: `phone_number=${encodeURIComponent(this.phone)}`,
-                });
-                const mpesaData = await mpesaRes.json();
-                await this.pollPaymentStatus(mpesaData.payment_id, data.sale_id);
-            } else {
-                window.location.href = `/sales/receipt/${data.sale_id}/`;
-            }
-        },
-        async pollPaymentStatus(paymentId, saleId) {
-            for (let i = 0; i < 20; i++) {
-                await new Promise(r => setTimeout(r, 3000));
-                const res = await fetch(`/payments/mpesa/status/${paymentId}/`);
-                const data = await res.json();
-                if (data.status === 'SUCCESS') {
-                    window.location.href = `/sales/receipt/${saleId}/`;
-                    return;
-                } else if (data.status === 'FAILED') {
-                    this.errorMessage = 'M-Pesa payment failed or was cancelled.';
-                    this.loading = false;
-                    return;
-                }
-            }
-            this.errorMessage = 'Payment confirmation timed out. Check payment status manually.';
-            this.loading = false;
-        },
-    }
-}
+    window.POS_URLS = {
+        createSale: "{% url 'sales:create_sale' %}",
+        createQuotation: "{% url 'sales:create_quotation' %}",
+    };
 </script>
+<script src="{% static 'js/pos.js' %}"></script>
 {% endblock %}
