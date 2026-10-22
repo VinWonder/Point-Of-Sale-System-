@@ -1,0 +1,11 @@
+{# Date preset buttons + custom range. Expects start, end, preset in context. #}
+<div class="d-flex flex-wrap gap-1 align-items-center">
+    {% for key, label in date_presets.items %}
+    <button type="submit" name="range" value="{{ key }}" class="btn btn-sm {% if preset == key %}btn-dark{% else %}btn-outline-dark{% endif %}">{{ label }}</button>
+    {% endfor %}
+    <span class="ms-2 small text-muted">or</span>
+    <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control form-control-sm" style="width: 150px">
+    <span class="small text-muted">to</span>
+    <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control form-control-sm" style="width: 150px">
+    <button type="submit" name="range" value="" class="btn btn-sm btn-outline-secondary">Apply</button>
+</div>
