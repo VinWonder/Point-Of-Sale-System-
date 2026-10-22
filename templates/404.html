@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Not found{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+    <div class="display-1 text-secondary"><i class="bi bi-search"></i></div>
+    <h2 class="fw-bold">We couldn't find that</h2>
+    <p class="text-muted">The page or record may have been removed, or the link is wrong.</p>
+    <a href="{% url 'dashboard:index' %}" class="btn btn-accent">Back to dashboard</a>
+</div>
+{% endblock %}
