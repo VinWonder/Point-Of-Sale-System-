@@ -3,10 +3,12 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 
+from accounts.audit import log_action
 from accounts.decorators import role_required
 from accounts.models import User
 from .forms import ProductForm, SupplierPurchaseForm
-from .models import Product, Stock, SupplierPurchase
+from .models import Product, Stock, StockMovement, SupplierPurchase
+from .services import adjust_stock
 
 
 @login_required
@@ -62,9 +64,16 @@ def supplier_purchase_create(request):
             purchase.created_by = request.user
             purchase.save()
 
-            stock, _ = Stock.objects.get_or_create(product=purchase.product, branch=purchase.branch)
-            stock.quantity += purchase.quantity
-            stock.save(update_fields=['quantity'])
+            adjust_stock(
+                purchase.product, purchase.branch, purchase.quantity, StockMovement.Kind.PURCHASE,
+                user=request.user, reference=f'Purchase #{purchase.pk}',
+                note=f'From {purchase.supplier}' if purchase.supplier else '',
+            )
+            # Keep the product's cost price in line with what we last paid
+            if purchase.cost_price != purchase.product.cost_price:
+                purchase.product.cost_price = purchase.cost_price
+                purchase.product.save(update_fields=['cost_price', 'updated_at'])
+            log_action(request.user, f'Restocked {purchase.quantity} x {purchase.product.name}', purchase)
 
             messages.success(request, f'Restocked {purchase.quantity} x {purchase.product.name} at {purchase.branch}.')
             return redirect('inventory:stock_list')
