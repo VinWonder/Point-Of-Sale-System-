@@ -32,6 +32,8 @@ REPORTS = [
      'text': 'Units, revenue and profit per product and category. Find best sellers and slow movers.'},
     {'url': 'reports:staff_performance', 'icon': 'bi-person-badge', 'title': 'Staff performance',
      'text': 'Sales, value, discounts given and voids per cashier, plus cash-up variances.'},
+    {'url': 'reports:debt_aging', 'icon': 'bi-hourglass-split', 'title': 'Debt aging',
+     'text': 'Who owes what and for how long: current, 31-60, 61-90 and 90+ days.'},
 ]
 
 
@@ -125,3 +127,56 @@ def staff_performance(request):
         r['average'] = (r['revenue'] / r['count']).quantize(Decimal('0.01')) if r['count'] else None
     ctx['rows'] = sorted(rows.values(), key=lambda r: r['revenue'] or 0, reverse=True)
     return render(request, 'reports/staff_performance.html', ctx)
+
+
+AGING_BUCKETS = [('current', 0, 30), ('d60', 31, 60), ('d90', 61, 90), ('over90', 91, None)]
+
+
+@role_required(*MANAGERS)
+def debt_aging(request):
+    """Unpaid credit sales grouped by customer and by how old the debt is."""
+    from django.utils import timezone
+    from customers.models import Customer
+
+    today = timezone.localdate()
+    open_sales = (
+        Sale.objects.filter(sale_type=Sale.SaleType.CREDIT, customer__isnull=False)
+        .exclude(status=Sale.Status.VOIDED)
+        .exclude(payment_status=Sale.PaymentStatus.PAID)
+        .select_related('customer')
+    )
+    customers = {}
+    for sale in open_sales:
+        due = sale.balance_due
+        if due <= 0:
+            continue
+        age = (today - timezone.localtime(sale.created_at).date()).days
+        row = customers.setdefault(sale.customer_id, {
+            'customer': sale.customer, 'oldest': age, 'total': Decimal('0.00'),
+            **{key: Decimal('0.00') for key, _, _ in AGING_BUCKETS},
+        })
+        bucket = next(key for key, lo, hi in AGING_BUCKETS if hi is None or age <= hi)
+        row[bucket] += due
+        row['total'] += due
+        row['oldest'] = max(row['oldest'], age)
+
+    # Debt not linked to any sale (opening balances) is shown separately so totals reconcile.
+    for customer in Customer.objects.filter(balance_owed__gt=0):
+        row = customers.setdefault(customer.pk, {
+            'customer': customer, 'oldest': None, 'total': Decimal('0.00'),
+            **{key: Decimal('0.00') for key, _, _ in AGING_BUCKETS},
+        })
+        row['unallocated'] = max(customer.balance_owed - row['total'], Decimal('0.00'))
+        row['total'] += row['unallocated']
+
+    rows = sorted(customers.values(), key=lambda r: r['total'], reverse=True)
+    totals = {key: sum((r[key] for r in rows), Decimal('0.00')) for key, _, _ in AGING_BUCKETS}
+    totals['unallocated'] = sum((r.get('unallocated', Decimal('0.00')) for r in rows), Decimal('0.00'))
+    totals['total'] = sum((r['total'] for r in rows), Decimal('0.00'))
+
+    if request.GET.get('export') == 'csv':
+        return csv_response('debt-aging', ['Customer', 'Phone', '0-30', '31-60', '61-90', '90+', 'Opening/other', 'Total'], (
+            [r['customer'].name, r['customer'].phone_number, r['current'], r['d60'], r['d90'], r['over90'],
+             r.get('unallocated', 0), r['total']] for r in rows
+        ))
+    return render(request, 'reports/debt_aging.html', {'rows': rows, 'totals': totals})

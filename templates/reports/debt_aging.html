@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Debt Aging{% endblock %}
+{% block page_title %}Reports / Debt Aging{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Debt Aging</h3>
+    <div class="d-flex gap-2 d-print-none">
+        <a href="?export=csv" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+        <button onclick="window.print()" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+    </div>
+</div>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Customer</th><th class="text-end">0–30 days</th><th class="text-end">31–60</th><th class="text-end">61–90</th><th class="text-end">90+</th><th class="text-end">Opening / other</th><th class="text-end">Total owed</th><th class="text-end">Oldest</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td><a href="{% url 'customers:customer_detail' r.customer.id %}" class="fw-semibold text-decoration-none">{{ r.customer.name }}</a><div class="small text-muted">{{ r.customer.phone_number }}</div></td>
+        <td class="text-end money">{% if r.current %}{{ r.current|money }}{% endif %}</td>
+        <td class="text-end money">{% if r.d60 %}{{ r.d60|money }}{% endif %}</td>
+        <td class="text-end money text-warning-emphasis">{% if r.d90 %}{{ r.d90|money }}{% endif %}</td>
+        <td class="text-end money text-danger fw-semibold">{% if r.over90 %}{{ r.over90|money }}{% endif %}</td>
+        <td class="text-end money text-muted">{% if r.unallocated %}{{ r.unallocated|money }}{% endif %}</td>
+        <td class="text-end money fw-bold">{{ r.total|money }}</td>
+        <td class="text-end small">{% if r.oldest is not None %}{{ r.oldest }} days{% else %}—{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No customer owes anything. 🎉</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot class="fw-bold">
+        <tr><td>Total</td>
+            <td class="text-end money">{{ totals.current|money }}</td><td class="text-end money">{{ totals.d60|money }}</td>
+            <td class="text-end money">{{ totals.d90|money }}</td><td class="text-end money">{{ totals.over90|money }}</td>
+            <td class="text-end money">{{ totals.unallocated|money }}</td><td class="text-end money">{{ totals.total|money }}</td><td></td></tr>
+    </tfoot>
+    {% endif %}
+</table>
+</div>
+{% endblock %}
