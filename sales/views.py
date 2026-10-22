@@ -259,7 +259,9 @@ def quotation_list(request):
     if status == 'open':
         quotations = quotations.filter(status=Quotation.Status.DRAFT).exclude(valid_until__lt=today)
     elif status == 'expired':
-        quotations = quotations.filter(status=Quotation.Status.DRAFT, valid_until__lt=today)
+        quotations = quotations.filter(
+            Q(status=Quotation.Status.EXPIRED) | Q(status=Quotation.Status.DRAFT, valid_until__lt=today)
+        )
     elif status == 'converted':
         quotations = quotations.filter(status=Quotation.Status.CONVERTED)
     q = request.GET.get('q', '').strip()

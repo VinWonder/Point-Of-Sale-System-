@@ -302,3 +302,23 @@ class ReturnTests(SaleTestMixin, TestCase):
         with self.assertRaises(SaleError):
             process_return(sale, self.cashier, {sale.items.get().pk: 1}, 'x', 'ACCOUNT')
         self.assertEqual(self.stock_of(self.nails), 19)
+
+
+class QuotationExpiryTests(SaleTestMixin, TestCase):
+    def test_expired_quotes_listed_and_not_convertible(self):
+        import io
+        from datetime import timedelta
+        from django.core.management import call_command
+        from django.utils import timezone
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier,
+                                     valid_until=timezone.localdate() - timedelta(days=1))
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=1, unit_price=150)
+        self.client.force_login(self.cashier)
+        self.client.post(reverse('sales:convert_quotation', args=[q.pk]))
+        self.assertFalse(Sale.objects.exists())
+
+        call_command('expire_quotations', stdout=io.StringIO())
+        q.refresh_from_db()
+        self.assertEqual(q.status, Quotation.Status.EXPIRED)
+        res = self.client.get(reverse('sales:quotation_list'), {'status': 'expired'})
+        self.assertContains(res, f'Q-{q.pk}')

@@ -33,7 +33,7 @@
             <td class="small {% if qt.is_expired and qt.status == 'DRAFT' %}text-danger{% endif %}">{{ qt.valid_until|date:"d M Y"|default:"—" }}</td>
             <td>
                 {% if qt.status == 'CONVERTED' %}<span class="badge bg-success">Converted</span>
-                {% elif qt.is_expired %}<span class="badge bg-secondary">Expired</span>
+                {% elif qt.is_expired or qt.status == 'EXPIRED' %}<span class="badge bg-secondary">Expired</span>
                 {% else %}<span class="badge bg-info text-dark">Open</span>{% endif %}
             </td>
             <td class="text-end"><a href="{% url 'sales:quotation' qt.id %}" class="btn btn-sm btn-outline-secondary">Open</a></td>
