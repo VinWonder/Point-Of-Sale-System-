@@ -11,6 +11,12 @@
 
 <div x-data="posCart()" x-init="init()" data-pos-screen class="pos-grid">
 
+    {% if not open_shift %}
+    <div class="alert {% if shift_required %}alert-danger{% else %}alert-secondary{% endif %} pos-full d-flex justify-content-between align-items-center py-2 mb-0">
+        <span><i class="bi bi-cash-coin"></i> {% if shift_required %}You must open your till shift before selling.{% else %}No till shift open — cash won't be tracked against a float.{% endif %}</span>
+        <a href="{% url 'registers:my_shift' %}" class="btn btn-sm btn-dark">Open shift</a>
+    </div>
+    {% endif %}
     {% if not pos_config.hasBranch %}
     <div class="alert alert-warning pos-full">Your account is not assigned to a branch, so you cannot sell yet. Ask a manager to assign you.</div>
     {% endif %}

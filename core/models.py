@@ -26,6 +26,9 @@ class ShopSettings(models.Model):
         help_text="Largest discount a cashier may give without a manager.",
     )
     quotation_validity_days = models.PositiveIntegerField(default=14)
+    require_open_shift = models.BooleanField(
+        default=False, help_text="Cashiers must open a till shift (with a float) before they can sell.",
+    )
 
     class Meta:
         verbose_name = "Shop settings"

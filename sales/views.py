@@ -22,6 +22,7 @@ from core.utils import paginate
 from customers.models import Customer
 from inventory.models import Category, Product, Stock
 from payments.mpesa import simulation_enabled
+from registers.services import current_shift
 from .models import Sale, SaleReturn, Quotation, QuotationItem
 from .services import SaleError, checkout, parse_lines, process_return, void_sale
 
@@ -64,6 +65,8 @@ def pos_screen(request):
     )
     settings = ShopSettings.load()
     return render(request, 'sales/pos.html', {
+        'open_shift': current_shift(request.user),
+        'shift_required': settings.require_open_shift,
         'products_data': products,
         'customers_data': customers,
         'categories_data': categories,
@@ -83,6 +86,8 @@ def create_sale(request):
     Creates a Sale from the POS cart. All rules (defaulter block, credit
     limit, stock, discounts) are enforced in sales.services.checkout.
     """
+    if ShopSettings.load().require_open_shift and not current_shift(request.user):
+        return JsonResponse({'error': 'Open your till shift before selling (Till > My Shift).'}, status=400)
     try:
         data = _json_body(request)
         customer = None
