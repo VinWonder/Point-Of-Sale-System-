@@ -234,3 +234,19 @@ class QuotationTests(SaleTestMixin, TestCase):
         q = self.make_quote(1)
         res = self.client.get(reverse('sales:convert_quotation', args=[q.pk]))
         self.assertEqual(res.status_code, 405)
+
+
+class VoidEndpointTests(SaleTestMixin, TestCase):
+    def test_cashier_cannot_void(self):
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 1}])
+        self.client.force_login(self.cashier)
+        res = self.client.post(reverse('sales:void_sale', args=[sale.pk]), {'reason': 'x'})
+        self.assertEqual(res.status_code, 403)
+
+    def test_manager_voids_via_endpoint(self):
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 4}])
+        self.client.force_login(self.manager)
+        self.client.post(reverse('sales:void_sale', args=[sale.pk]), {'reason': 'Wrong customer'})
+        sale.refresh_from_db()
+        self.assertTrue(sale.is_voided)
+        self.assertEqual(self.stock_of(self.nails), 20)

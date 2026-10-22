@@ -10,12 +10,14 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.audit import log_action
+from accounts.decorators import role_required
+from accounts.models import User
 from core.models import ShopSettings
 from customers.models import Customer
 from inventory.models import Category, Product, Stock
 from payments.mpesa import simulation_enabled
 from .models import Sale, Quotation, QuotationItem
-from .services import SaleError, checkout, parse_lines
+from .services import SaleError, checkout, parse_lines, void_sale
 
 
 def _json_body(request):
@@ -188,3 +190,21 @@ def sale_list(request):
 def quotation_list(request):
     quotations = Quotation.objects.select_related('customer', 'branch').order_by('-created_at')[:100]
     return render(request, 'sales/quotation_list.html', {'quotations': quotations})
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+@require_POST
+def void_sale_view(request, sale_id):
+    """Manager cancels a sale made in error. Stock is returned; credit charges reversed."""
+    sale = get_object_or_404(Sale, pk=sale_id)
+    try:
+        void_sale(sale, request.user, request.POST.get('reason', ''))
+    except SaleError as exc:
+        messages.error(request, str(exc))
+    else:
+        sale.refresh_from_db()
+        msg = f'Sale #{sale.id} voided and stock returned.'
+        if sale.amount_paid:
+            msg += f' Refund KES {sale.amount_paid:,.2f} to the customer.'
+        messages.success(request, msg)
+    return redirect('sales:receipt', sale_id=sale.id)
