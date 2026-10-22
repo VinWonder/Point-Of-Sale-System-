@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     # Third-party
     'crispy_forms',
     'crispy_bootstrap5',
-    'django_daraja',
+    'core.apps.DarajaConfig',  # django_daraja, see core/apps.py
 
     # Local apps
     'core',

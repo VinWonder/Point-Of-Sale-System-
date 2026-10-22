@@ -42,7 +42,7 @@ jobs:
           pip install "Django>=5.2.8,<5.3" djangorestframework psycopg2-binary python-decouple \
             django-crispy-forms crispy-bootstrap5 django-daraja whitenoise
       - name: Check for missing migrations
-        run: python manage.py makemigrations --check --dry-run accounts branches core customers dashboard inventory payments registers sales
+        run: python manage.py makemigrations --check --dry-run
       - name: Django system checks
         run: python manage.py check
       - name: Collect static files
