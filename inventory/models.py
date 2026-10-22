@@ -108,3 +108,34 @@ class SupplierPurchase(models.Model):
 
     def __str__(self):
         return f"{self.product} x{self.quantity} from {self.supplier}"
+
+
+class StockMovement(models.Model):
+    """Immutable ledger row for every change in a branch's stock level."""
+
+    class Kind(models.TextChoices):
+        SALE = "SALE", "Sale"
+        RETURN = "RETURN", "Customer return"
+        VOID = "VOID", "Sale voided"
+        PURCHASE = "PURCHASE", "Supplier purchase"
+        TRANSFER_OUT = "TRANSFER_OUT", "Transfer out"
+        TRANSFER_IN = "TRANSFER_IN", "Transfer in"
+        TRANSFER_CANCEL = "TRANSFER_CANCEL", "Transfer cancelled"
+        ADJUSTMENT = "ADJUSTMENT", "Manual adjustment"
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="movements")
+    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE, related_name="stock_movements")
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    quantity = models.IntegerField(help_text="Positive adds stock, negative removes it")
+    balance_after = models.IntegerField()
+    reference = models.CharField(max_length=100, blank=True, help_text="e.g. Receipt #12, Transfer #3")
+    note = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["product", "branch", "-created_at"])]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} {self.quantity:+d} {self.product.name} @ {self.branch}"
