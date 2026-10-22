@@ -60,6 +60,13 @@ def customer_detail(request, customer_id):
         for p in customer.debt_payments.select_related('received_by')
     ]
     entries.sort(key=lambda e: e['date'])
+    # Debt carried over from before the system (or entered by hand) shows as an opening balance
+    # so the running balance always ends at what the customer actually owes.
+    opening = customer.balance_owed - sum((e['debit'] - e['credit'] for e in entries), Decimal('0.00'))
+    if opening:
+        entries.insert(0, {'date': customer.created_at, 'kind': 'opening', 'ref': 'Opening balance',
+                           'obj': None, 'debit': max(opening, Decimal('0.00')),
+                           'credit': max(-opening, Decimal('0.00'))})
     running = Decimal('0.00')
     for e in entries:
         running += e['debit'] - e['credit']

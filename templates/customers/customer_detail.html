@@ -40,7 +40,8 @@
                 <tr>
                     <td class="small text-nowrap">{{ e.date|date:"d M Y H:i" }}</td>
                     <td class="small">
-                        {% if e.kind == 'sale' %}<a href="{% url 'sales:receipt' e.obj.id %}">Credit sale {{ e.ref }}</a> · {{ e.obj.branch.name }}
+                        {% if e.kind == 'opening' %}<em>Opening balance</em>
+                        {% elif e.kind == 'sale' %}<a href="{% url 'sales:receipt' e.obj.id %}">Credit sale {{ e.ref }}</a> · {{ e.obj.branch.name }}
                         {% else %}Payment · {{ e.ref }}{% if e.obj.received_by %} <span class="text-muted">({{ e.obj.received_by.username }})</span>{% endif %}{% endif %}
                     </td>
                     <td class="text-end money">{% if e.debit %}{{ e.debit|money }}{% endif %}</td>
