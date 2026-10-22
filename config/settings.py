@@ -2,6 +2,7 @@
 Django settings for the Hardware Shop POS project.
 """
 
+import warnings
 from pathlib import Path
 from decouple import config, Csv
 
@@ -129,6 +130,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Until collectstatic has been run in development, WhiteNoise warns on every request.
+warnings.filterwarnings('ignore', message='No directory at', module='whitenoise.base')
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {
