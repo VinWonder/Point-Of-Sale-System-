@@ -250,3 +250,55 @@ class VoidEndpointTests(SaleTestMixin, TestCase):
         sale.refresh_from_db()
         self.assertTrue(sale.is_voided)
         self.assertEqual(self.stock_of(self.nails), 20)
+
+
+class ReturnTests(SaleTestMixin, TestCase):
+    def test_return_restocks_and_refunds(self):
+        from .services import process_return
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 5}])
+        item = sale.items.get()
+        ret = process_return(sale, self.cashier, {item.pk: 2}, 'Too many', 'CASH')
+        self.assertEqual(ret.refund_amount, Decimal('300.00'))
+        self.assertEqual(self.stock_of(self.nails), 17)
+        item.refresh_from_db()
+        self.assertEqual(item.returnable_quantity, 3)
+
+    def test_cannot_return_more_than_sold(self):
+        from .services import process_return
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 2}])
+        item = sale.items.get()
+        process_return(sale, self.cashier, {item.pk: 2}, 'Wrong size', 'CASH')
+        with self.assertRaises(SaleError):
+            process_return(sale, self.cashier, {item.pk: 1}, 'Again', 'CASH')
+
+    def test_damaged_return_not_restocked(self):
+        from .services import process_return
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 2}])
+        item = sale.items.get()
+        process_return(sale, self.cashier, {item.pk: 1}, 'Rusty', 'CASH', restock={item.pk: False})
+        self.assertEqual(self.stock_of(self.nails), 18)
+
+    def test_refund_shares_discount(self):
+        from .services import process_return
+        sale = self.sell([{'product_id': self.cement.pk, 'qty': 2}], discount=160, user=self.manager)
+        item = sale.items.get()
+        ret = process_return(sale, self.manager, {item.pk: 1}, 'Extra bag', 'CASH')
+        self.assertEqual(ret.refund_amount, Decimal('720.00'))
+
+    def test_account_refund_reduces_debt(self):
+        from .services import process_return
+        customer = Customer.objects.create(name='Fundi', phone_number='254711', credit_limit=5000)
+        sale = self.sell([{'product_id': self.cement.pk, 'qty': 3}], payment_method='CREDIT', customer=customer)
+        process_return(sale, self.cashier, {sale.items.get().pk: 1}, 'Unused', 'ACCOUNT')
+        customer.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertEqual(customer.balance_owed, Decimal('1600.00'))
+        self.assertEqual(sale.balance_due, Decimal('1600.00'))
+
+    def test_account_refund_rejected_on_paid_sale(self):
+        from .services import process_return
+        customer = Customer.objects.create(name='Fundi', phone_number='254711', credit_limit=5000)
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 1}], customer=customer)
+        with self.assertRaises(SaleError):
+            process_return(sale, self.cashier, {sale.items.get().pk: 1}, 'x', 'ACCOUNT')
+        self.assertEqual(self.stock_of(self.nails), 19)

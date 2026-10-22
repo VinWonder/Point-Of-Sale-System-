@@ -221,3 +221,81 @@ def void_sale(sale, user, reason):
     refund_note = f' Refund KES {sale.amount_paid:,.2f} to the customer.' if sale.amount_paid else ''
     log_action(user, f'Voided sale #{sale.pk}', sale, reason + refund_note)
     return sale
+
+
+@transaction.atomic
+def process_return(sale, user, quantities, reason, refund_method, restock=None):
+    """
+    Return goods from `sale`. `quantities` maps SaleItem id -> qty to return;
+    `restock` maps SaleItem id -> bool (default True). The refund is the
+    line value less the sale's discount share, so discounts aren't refunded twice.
+    """
+    from .models import SaleReturn, SaleReturnItem
+
+    sale = Sale.objects.select_for_update().get(pk=sale.pk)
+    if sale.status == Sale.Status.VOIDED:
+        raise SaleError('This sale was voided; nothing can be returned.')
+    if not reason.strip():
+        raise SaleError('Give a reason for the return.')
+    if refund_method not in SaleReturn.RefundMethod.values:
+        raise SaleError('Choose how the customer is refunded.')
+    if refund_method == SaleReturn.RefundMethod.ACCOUNT and not sale.customer_id:
+        raise SaleError('Walk-in sales cannot be refunded to an account.')
+    restock = restock or {}
+
+    items = {item.pk: item for item in sale.items.select_for_update().select_related('product')}
+    lines = []
+    for item_id, qty in quantities.items():
+        item = items.get(int(item_id))
+        qty = int(qty or 0)
+        if item is None or qty <= 0:
+            continue
+        if qty > item.returnable_quantity:
+            raise SaleError(f'Only {item.returnable_quantity} of {item.product.name} can still be returned.')
+        lines.append((item, qty))
+    if not lines:
+        raise SaleError('Select at least one item to return.')
+
+    discount_ratio = (sale.total / sale.subtotal) if sale.subtotal else Decimal('1')
+    refund_total = Decimal('0.00')
+    sale_return = SaleReturn.objects.create(
+        sale=sale, branch=sale.branch, refund_method=refund_method, refund_amount=0,
+        reason=reason[:255], processed_by=user,
+    )
+    for item, qty in lines:
+        amount = (qty * item.unit_price * discount_ratio).quantize(Decimal('0.01'))
+        put_back = restock.get(item.pk, True)
+        SaleReturnItem.objects.create(
+            sale_return=sale_return, sale_item=item, quantity=qty, restock=put_back, amount=amount,
+        )
+        item.returned_quantity += qty
+        item.save(update_fields=['returned_quantity'])
+        if put_back:
+            adjust_stock(
+                item.product, sale.branch, qty, StockMovement.Kind.RETURN, user=user,
+                reference=f'Return #{sale_return.pk} (Receipt #{sale.pk})', note=reason[:255],
+            )
+        refund_total += amount
+
+    sale_return.refund_amount = refund_total
+    sale_return.save(update_fields=['refund_amount'])
+    if refund_method == SaleReturn.RefundMethod.ACCOUNT and refund_total > sale.balance_due:
+        raise SaleError(
+            f'Only KES {sale.balance_due:,.2f} is still owed on this sale. '
+            f'Refund the KES {refund_total:,.2f} in cash or M-Pesa instead.'
+        )
+
+    if refund_method == SaleReturn.RefundMethod.ACCOUNT:
+        # Returned goods first cancel what is still owed on this sale.
+        customer = Customer.objects.select_for_update().get(pk=sale.customer_id)
+        Payment.objects.create(
+            sale=sale, method=Payment.Method.CREDIT_NOTE, amount=refund_total,
+            status=Payment.Status.SUCCESS, reference=f'Return #{sale_return.pk}', received_by=user,
+        )
+        customer.balance_owed = max(customer.balance_owed - refund_total, Decimal('0.00'))
+        customer.save(update_fields=['balance_owed'])
+        sale.refresh_payment_status()
+        sale.save(update_fields=['payment_status', 'amount_paid'])
+
+    log_action(user, f'Return on sale #{sale.pk}: KES {refund_total:,.2f} ({refund_method})', sale_return, reason)
+    return sale_return

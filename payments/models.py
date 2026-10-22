@@ -8,6 +8,7 @@ class Payment(models.Model):
         CARD = "CARD", "Card"
         BANK = "BANK", "Bank transfer"
         CHEQUE = "CHEQUE", "Cheque"
+        CREDIT_NOTE = "CREDIT_NOTE", "Credit note (returned goods)"
 
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"

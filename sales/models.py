@@ -167,3 +167,34 @@ class SaleItem(models.Model):
     @property
     def returnable_quantity(self):
         return self.quantity - self.returned_quantity
+
+
+class SaleReturn(models.Model):
+    """Goods brought back by a customer. Stock is restored and money refunded or credited."""
+
+    class RefundMethod(models.TextChoices):
+        CASH = "CASH", "Cash refund"
+        MPESA = "MPESA", "M-Pesa refund"
+        ACCOUNT = "ACCOUNT", "Credit to customer account"
+
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="returns")
+    branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
+    refund_method = models.CharField(max_length=10, choices=RefundMethod.choices)
+    refund_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.CharField(max_length=255)
+    processed_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Return #{self.pk} on sale #{self.sale_id}"
+
+
+class SaleReturnItem(models.Model):
+    sale_return = models.ForeignKey(SaleReturn, on_delete=models.CASCADE, related_name="items")
+    sale_item = models.ForeignKey(SaleItem, on_delete=models.PROTECT, related_name="return_lines")
+    quantity = models.PositiveIntegerField()
+    restock = models.BooleanField(default=True, help_text="Untick for damaged goods that can't be resold")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
