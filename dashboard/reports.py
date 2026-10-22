@@ -34,6 +34,8 @@ REPORTS = [
      'text': 'Sales, value, discounts given and voids per cashier, plus cash-up variances.'},
     {'url': 'reports:debt_aging', 'icon': 'bi-hourglass-split', 'title': 'Debt aging',
      'text': 'Who owes what and for how long: current, 31-60, 61-90 and 90+ days.'},
+    {'url': 'reports:reorder', 'icon': 'bi-cart-check', 'title': 'Reorder list',
+     'text': 'Items at or below reorder level with suggested order quantities from recent sales.'},
 ]
 
 
@@ -180,3 +182,57 @@ def debt_aging(request):
              r.get('unallocated', 0), r['total']] for r in rows
         ))
     return render(request, 'reports/debt_aging.html', {'rows': rows, 'totals': totals})
+
+
+@role_required(*MANAGERS)
+def reorder(request):
+    """
+    Low-stock items with a suggested order: enough to cover ~30 days of recent
+    demand (and at least double the reorder level), minus what is on hand.
+    """
+    import math
+    from datetime import timedelta
+    from django.utils import timezone
+    from inventory.models import Stock, SupplierPurchase
+    from sales.models import SaleItem
+
+    branch = scoped_branch(request)
+    today = timezone.localdate()
+    since = today - timedelta(days=30)
+    stocks = Stock.objects.select_related('product', 'branch').filter(
+        product__is_active=True, quantity__lte=F('product__reorder_level'),
+    )
+    if branch:
+        stocks = stocks.filter(branch=branch)
+
+    sold = SaleItem.objects.filter(sale__created_at__date__gte=since).exclude(sale__status=Sale.Status.VOIDED)
+    demand = {
+        (r['product_id'], r['sale__branch_id']): r['qty']
+        for r in sold.values('product_id', 'sale__branch_id').annotate(qty=Sum(F('quantity') - F('returned_quantity')))
+    }
+    rows = []
+    for st in stocks.order_by('branch__name', 'product__name'):
+        monthly = demand.get((st.product_id, st.branch_id)) or 0
+        target = max(monthly, st.product.reorder_level * 2)
+        suggested = max(target - st.quantity, 0)
+        last = SupplierPurchase.objects.filter(product=st.product).select_related('supplier').first()
+        rows.append({
+            'stock': st, 'monthly': monthly, 'daily': round(monthly / 30, 1),
+            'days_left': math.floor(st.quantity / (monthly / 30)) if monthly and st.quantity > 0 else None,
+            'suggested': suggested,
+            'supplier': last.supplier if last else None,
+            'unit_cost': last.cost_price if last else st.product.cost_price,
+            'cost': suggested * (last.cost_price if last else st.product.cost_price),
+        })
+
+    if request.GET.get('export') == 'csv':
+        return csv_response('reorder-list', ['Branch', 'SKU', 'Product', 'On hand', 'Reorder level', 'Sold last 30d',
+                                             'Suggested order', 'Last supplier', 'Unit cost', 'Order cost'], (
+            [r['stock'].branch.name, r['stock'].product.sku, r['stock'].product.name, r['stock'].quantity,
+             r['stock'].product.reorder_level, r['monthly'], r['suggested'], r['supplier'] or '',
+             r['unit_cost'], r['cost']] for r in rows
+        ))
+    return render(request, 'reports/reorder.html', {
+        'rows': rows, 'branch': branch, 'branches': Branch.objects.filter(is_active=True).order_by('name'),
+        'order_total': sum((r['cost'] for r in rows), Decimal('0.00')),
+    })

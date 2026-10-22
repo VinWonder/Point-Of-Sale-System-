@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Reorder List{% endblock %}
+{% block page_title %}Reports / Reorder List{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h3>Reorder List</h3>
+        <div class="text-muted small">{% if branch %}{{ branch.name }}{% else %}All branches{% endif %} · estimated order value {{ order_total|money }}</div>
+    </div>
+    <div class="d-flex gap-2 d-print-none">
+        {% if user.role == 'OWNER' %}
+        <form method="get"><select name="branch" class="form-select" onchange="this.form.submit()">
+            <option value="">All branches</option>
+            {% for b in branches %}<option value="{{ b.id }}" {% if branch.id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select></form>
+        {% endif %}
+        <a href="?{% query_replace export='csv' %}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> CSV</a>
+        <button onclick="window.print()" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Print</button>
+    </div>
+</div>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Product</th><th>Branch</th><th class="text-end">On hand</th><th class="text-end">Reorder at</th><th class="text-end">Sold (30d)</th><th class="text-end">Days left</th><th class="text-end">Suggested order</th><th>Last supplier</th><th class="text-end">Est. cost</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td><a href="{% url 'inventory:product_detail' r.stock.product.id %}" class="fw-semibold text-decoration-none">{{ r.stock.product.name }}</a><div class="small text-muted">{{ r.stock.product.sku }}</div></td>
+        <td class="small">{{ r.stock.branch.name }}</td>
+        <td class="text-end fw-semibold {% if r.stock.quantity <= 0 %}text-danger{% endif %}">{{ r.stock.quantity }}</td>
+        <td class="text-end text-muted">{{ r.stock.product.reorder_level }}</td>
+        <td class="text-end">{{ r.monthly }}</td>
+        <td class="text-end">{% if r.days_left is not None %}<span class="badge text-bg-{% if r.days_left < 3 %}danger{% elif r.days_left < 7 %}warning{% else %}light{% endif %}">{{ r.days_left }}d</span>{% elif r.stock.quantity <= 0 %}<span class="badge bg-dark">Out</span>{% else %}—{% endif %}</td>
+        <td class="text-end fw-bold">{{ r.suggested }} <span class="small text-muted fw-normal">{{ r.stock.product.unit }}</span></td>
+        <td class="small">{{ r.supplier|default:"—" }}<div class="text-muted">@ {{ r.unit_cost|money }}</div></td>
+        <td class="text-end money">{{ r.cost|money }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="9" class="text-center text-muted py-4">Nothing needs reordering. 👍</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="small text-muted mt-2">Suggested order covers the last 30 days of sales or twice the reorder level, whichever is more, minus stock on hand.</p>
+{% endblock %}
