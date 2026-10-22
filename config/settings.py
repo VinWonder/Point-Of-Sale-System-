@@ -2,6 +2,7 @@
 Django settings for the Hardware Shop POS project.
 """
 
+import sys
 import warnings
 from pathlib import Path
 from decouple import config, Csv
@@ -120,6 +121,10 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+# Tests create many users; full-strength hashing makes the suite crawl.
+if 'test' in sys.argv:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 
 # --- Internationalization ---------------------------------------------------
 LANGUAGE_CODE = 'en-us'
