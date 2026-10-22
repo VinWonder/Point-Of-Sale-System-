@@ -1,2 +1,178 @@
-body { background-color: #f4f6f9; }
-.card { border: none; }
+/* Hardware POS theme — slate + safety orange */
+:root {
+    --accent: #f97316;
+    --accent-dark: #ea580c;
+    --slate: #0f172a;
+    --slate-2: #1e293b;
+    --muted: #64748b;
+    --bg: #f1f5f9;
+    --sidebar-w: 240px;
+    --topbar-h: 60px;
+}
+
+body {
+    background-color: var(--bg);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: #0f172a;
+}
+
+.card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+.card-header {
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    font-weight: 600;
+    border-radius: 12px 12px 0 0 !important;
+}
+
+/* ---- Layout ------------------------------------------------------------ */
+.sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--sidebar-w);
+    background: var(--slate);
+    color: #cbd5e1;
+    padding: 1rem;
+    overflow-y: auto;
+    z-index: 1040;
+    transition: transform .2s ease;
+}
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    margin-bottom: 1.25rem;
+}
+.brand-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--accent);
+    display: grid; place-items: center;
+    font-size: 1.1rem;
+}
+.brand-text { line-height: 1.1; }
+.sidebar-nav .nav-link {
+    color: #cbd5e1;
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    display: flex;
+    gap: .65rem;
+    align-items: center;
+    font-size: .925rem;
+}
+.sidebar-nav .nav-link:hover { background: var(--slate-2); color: #fff; }
+.sidebar-nav .nav-link.active { background: rgba(249, 115, 22, .15); color: #fdba74; }
+.nav-section {
+    text-transform: uppercase;
+    font-size: .7rem;
+    letter-spacing: .08em;
+    color: var(--muted);
+    margin: 1rem .75rem .35rem;
+}
+.sidebar kbd { background: rgba(0,0,0,.25); font-size: .7rem; }
+
+.topbar {
+    position: sticky;
+    top: 0;
+    height: var(--topbar-h);
+    margin-left: var(--sidebar-w);
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    z-index: 1030;
+}
+.topbar-title { font-weight: 600; font-size: 1.05rem; }
+.avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--slate);
+    color: #fff;
+    display: inline-grid;
+    place-items: center;
+    font-weight: 600;
+}
+.main-content {
+    margin-left: var(--sidebar-w);
+    padding: 1.5rem;
+}
+
+@media (max-width: 991.98px) {
+    .sidebar { transform: translateX(-100%); }
+    body.sidebar-open .sidebar { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.3); }
+    .topbar, .main-content { margin-left: 0; }
+    .main-content { padding: 1rem; }
+}
+
+/* ---- Components -------------------------------------------------------- */
+.btn-accent {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+.btn-accent:hover, .btn-accent:focus { background: var(--accent-dark); border-color: var(--accent-dark); color: #fff; }
+
+.page-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+.page-header h3 { margin: 0; font-weight: 700; }
+
+.stat-card { padding: 1.1rem 1.25rem; }
+.stat-card .stat-label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+.stat-card .stat-value { font-size: 1.6rem; font-weight: 700; margin-top: .15rem; }
+.stat-card .stat-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font-size: 1.25rem;
+}
+
+.table { --bs-table-bg: transparent; }
+.table thead th {
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    border-bottom-width: 1px;
+}
+.table-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+.table-card .table { margin: 0; }
+.table-card .table td, .table-card .table th { padding: .7rem 1rem; }
+
+.filter-bar {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: .75rem;
+    margin-bottom: 1rem;
+}
+
+.money { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---- Auth -------------------------------------------------------------- */
+.auth-wrapper {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, var(--slate) 0%, #334155 100%);
+}
+
+/* ---- Printing ---------------------------------------------------------- */
+@media print {
+    body { background: #fff; }
+    .main-content { margin: 0; padding: 0; }
+    .card { border: none; box-shadow: none; }
+}
