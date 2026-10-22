@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from decimal import ROUND_CEILING
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -36,7 +37,7 @@ def initiate_mpesa_payment(request, sale_id):
     if amount <= 0:
         return JsonResponse({'error': 'Nothing left to pay on this sale.'}, status=400)
     # M-Pesa only accepts whole shillings; round up so the sale is fully covered.
-    whole_amount = int(-(-amount // 1))
+    whole_amount = int(amount.to_integral_value(rounding=ROUND_CEILING))
 
     payment = Payment.objects.create(
         sale=sale, method=Payment.Method.MPESA, amount=whole_amount,
