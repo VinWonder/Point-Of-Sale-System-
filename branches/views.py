@@ -16,7 +16,29 @@ from .models import Branch, StockTransfer
 
 @login_required
 def branch_list(request):
-    branches = Branch.objects.all().order_by('name')
+    """Branches with today's takings, stock value and who is on duty."""
+    from decimal import Decimal
+    from django.db.models import Count, DecimalField, F, Q, Sum, Value
+    from django.db.models.functions import Coalesce
+
+    today = timezone.localdate()
+    zero = Value(Decimal('0.00'), output_field=DecimalField(max_digits=14, decimal_places=2))
+    branches = Branch.objects.annotate(
+        staff_count=Count('staff', filter=Q(staff__is_active=True), distinct=True),
+    ).order_by('-is_active', 'name')
+    stats = {}
+    for b in branches:
+        stats[b.pk] = {
+            'today': b.sale_set.filter(created_at__date=today).exclude(status='VOIDED').aggregate(
+                s=Coalesce(Sum('total'), zero), n=Count('id')),
+            'stock_value': b.stock_levels.filter(quantity__gt=0).aggregate(
+                s=Coalesce(Sum(F('quantity') * F('product__cost_price'),
+                               output_field=DecimalField(max_digits=14, decimal_places=2)), zero))['s'],
+            'low': b.stock_levels.filter(quantity__lte=F('product__reorder_level'), product__is_active=True).count(),
+            'open_tills': b.shifts.filter(status='OPEN').count(),
+        }
+    for b in branches:
+        b.stats = stats[b.pk]
     return render(request, 'branches/branch_list.html', {'branches': branches})
 
 
