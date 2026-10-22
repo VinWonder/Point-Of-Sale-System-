@@ -11,6 +11,7 @@ urlpatterns = [
     path('quotation/<int:quotation_id>/', views.quotation_view, name='quotation'),
     path('quotations/', views.quotation_list, name='quotation_list'),
     path('receipt/<int:sale_id>/', views.receipt, name='receipt'),
+    path('<int:sale_id>/return/', views.sale_return_create, name='sale_return'),
     path('<int:sale_id>/void/', views.void_sale_view, name='void_sale'),
     path('history/', views.sale_list, name='sale_list'),
     path('history/export/', views.sale_export, name='sale_export'),

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Return — {{ sale.receipt_number }}{% endblock %}
+{% block page_title %}Sales / Return on {{ sale.receipt_number }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h3>Customer return</h3>
+        <div class="text-muted small">{{ sale.receipt_number }} · {{ sale.created_at|date:"d M Y H:i" }} · {{ sale.customer|default:"Walk-in" }} · {{ sale.total|money }}</div>
+    </div>
+    <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-secondary">Back to receipt</a>
+</div>
+
+<form method="post" class="row g-3">
+    {% csrf_token %}
+    <div class="col-lg-8">
+        <div class="table-card">
+            <table class="table align-middle">
+                <thead><tr><th>Item</th><th class="text-end">Price</th><th class="text-end">Sold</th><th class="text-end">Already returned</th><th style="width:120px">Return qty</th><th>Back to shelf?</th></tr></thead>
+                <tbody>
+                {% for item in items %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td class="text-end money">{{ item.unit_price|money }}</td>
+                    <td class="text-end">{{ item.quantity }}</td>
+                    <td class="text-end">{{ item.returned_quantity }}</td>
+                    <td>
+                        {% if item.returnable_quantity %}
+                        <input type="number" name="qty_{{ item.id }}" min="0" max="{{ item.returnable_quantity }}" value="0" class="form-control form-control-sm">
+                        {% else %}<span class="text-muted small">Fully returned</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if item.returnable_quantity %}
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="restock_{{ item.id }}" id="rs{{ item.id }}" checked>
+                            <label class="form-check-label small" for="rs{{ item.id }}">Restock</label>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if sale.discount_amount %}<p class="small text-muted mt-2">This sale had a {{ sale.discount_amount|money }} discount; refunds are reduced proportionally.</p>{% endif %}
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <label class="form-label">Refund method</label>
+                <select name="refund_method" class="form-select mb-3" required>
+                    {% for v, l in refund_methods %}
+                    {% if v != 'ACCOUNT' or sale.customer %}<option value="{{ v }}" {% if v == 'ACCOUNT' and sale.balance_due > 0 %}selected{% endif %}>{{ l }}</option>{% endif %}
+                    {% endfor %}
+                </select>
+                {% if sale.balance_due > 0 %}<p class="small text-muted">Still owed on this sale: {{ sale.balance_due|money }}. "Credit to account" reduces this.</p>{% endif %}
+                <label class="form-label">Reason</label>
+                <input type="text" name="reason" class="form-control mb-3" required maxlength="255" placeholder="e.g. wrong size, unused, faulty">
+                <button class="btn btn-warning w-100" onclick="return confirm('Process this return?');"><i class="bi bi-arrow-return-left"></i> Process return</button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}

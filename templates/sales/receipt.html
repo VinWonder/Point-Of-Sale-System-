@@ -53,6 +53,9 @@
         <div class="r-row fw-bold"><span>BALANCE DUE</span><span>{{ sale.balance_due|money }}</span></div>
         {% endif %}
 
+        {% for r in sale.returns.all %}
+        <div class="r-row"><span>Return #{{ r.id }} ({{ r.created_at|date:"d/m" }})</span><span>-{{ r.refund_amount|money }}</span></div>
+        {% endfor %}
         <div class="r-rule"></div>
         <div class="text-center r-muted">
             {% if sale.is_voided %}<div class="fw-bold">VOIDED {{ sale.voided_at|date:"d/m/Y H:i" }}: {{ sale.void_reason }}</div>{% endif %}
@@ -78,6 +81,7 @@
         </div>
 
         {% if not sale.is_voided and user.role != 'CASHIER' %}
+        <a href="{% url 'sales:sale_return' sale.id %}" class="btn btn-outline-warning w-100 mt-3"><i class="bi bi-arrow-return-left"></i> Customer return / refund</a>
         <div class="card mt-3 border-danger-subtle">
             <div class="card-body">
                 <h6 class="text-danger"><i class="bi bi-x-octagon"></i> Void this sale</h6>

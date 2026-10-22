@@ -22,8 +22,8 @@ from core.utils import paginate
 from customers.models import Customer
 from inventory.models import Category, Product, Stock
 from payments.mpesa import simulation_enabled
-from .models import Sale, Quotation, QuotationItem
-from .services import SaleError, checkout, parse_lines, void_sale
+from .models import Sale, SaleReturn, Quotation, QuotationItem
+from .services import SaleError, checkout, parse_lines, process_return, void_sale
 
 
 def _json_body(request):
@@ -285,3 +285,27 @@ def sale_export(request):
         'Receipt', 'Date', 'Branch', 'Served by', 'Customer', 'Type', 'Status', 'Payment',
         'Subtotal', 'Discount', 'Total', 'VAT', 'Paid', 'Balance',
     ], rows)
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def sale_return_create(request, sale_id):
+    """Pick the lines and quantities the customer is bringing back."""
+    sale = get_object_or_404(Sale.objects.select_related('customer', 'branch'), pk=sale_id)
+    items = list(sale.items.select_related('product'))
+    if request.method == 'POST':
+        quantities = {item.pk: request.POST.get(f'qty_{item.pk}') or 0 for item in items}
+        restock = {item.pk: request.POST.get(f'restock_{item.pk}') == 'on' for item in items}
+        try:
+            sale_return = process_return(
+                sale, request.user, quantities, request.POST.get('reason', ''),
+                request.POST.get('refund_method', ''), restock=restock,
+            )
+        except SaleError as exc:
+            messages.error(request, str(exc))
+        else:
+            how = sale_return.get_refund_method_display().lower()
+            messages.success(request, f'Return recorded: KES {sale_return.refund_amount:,.2f} ({how}).')
+            return redirect('sales:receipt', sale_id=sale.id)
+    return render(request, 'sales/return_form.html', {
+        'sale': sale, 'items': items, 'refund_methods': SaleReturn.RefundMethod.choices,
+    })
