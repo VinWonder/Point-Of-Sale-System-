@@ -36,6 +36,8 @@ REPORTS = [
      'text': 'Who owes what and for how long: current, 31-60, 61-90 and 90+ days.'},
     {'url': 'reports:reorder', 'icon': 'bi-cart-check', 'title': 'Reorder list',
      'text': 'Items at or below reorder level with suggested order quantities from recent sales.'},
+    {'url': 'reports:vat', 'icon': 'bi-bank', 'title': 'VAT summary',
+     'text': 'Output VAT on sales per month, net of refunds, ready for the KRA iTax return.'},
 ]
 
 
@@ -235,4 +237,44 @@ def reorder(request):
     return render(request, 'reports/reorder.html', {
         'rows': rows, 'branch': branch, 'branches': Branch.objects.filter(is_active=True).order_by('name'),
         'order_total': sum((r['cost'] for r in rows), Decimal('0.00')),
+    })
+
+
+@role_required(*MANAGERS)
+def vat_summary(request):
+    """Output VAT per month. Prices are VAT-inclusive, so VAT is extracted from totals."""
+    from django.db.models.functions import TruncMonth
+    from core.models import ShopSettings
+    from sales.models import SaleReturn, vat_portion
+
+    branch = scoped_branch(request)
+    rate = ShopSettings.load().vat_rate
+    sales = metrics.live_sales(branch)
+    returns = SaleReturn.objects.exclude(sale__status=Sale.Status.VOIDED)
+    if branch:
+        returns = returns.filter(branch=branch)
+
+    months = {}
+    for r in sales.annotate(m=TruncMonth('created_at')).values('m').annotate(gross=Sum('total'), vat=Sum('tax_amount')):
+        months[r['m'].date()] = {'month': r['m'].date(), 'gross': r['gross'], 'vat': r['vat'],
+                                 'refunds': Decimal('0.00'), 'refund_vat': Decimal('0.00')}
+    for r in returns.annotate(m=TruncMonth('created_at')).values('m').annotate(total=Sum('refund_amount')):
+        row = months.setdefault(r['m'].date(), {'month': r['m'].date(), 'gross': Decimal('0.00'),
+                                                'vat': Decimal('0.00'), 'refunds': Decimal('0.00'),
+                                                'refund_vat': Decimal('0.00')})
+        row['refunds'] = r['total']
+        row['refund_vat'] = vat_portion(r['total'], rate)
+
+    rows = sorted(months.values(), key=lambda r: r['month'], reverse=True)[:24]
+    for r in rows:
+        r['net_vat'] = r['vat'] - r['refund_vat']
+        r['net_sales'] = r['gross'] - r['refunds'] - r['net_vat']
+
+    if request.GET.get('export') == 'csv':
+        return csv_response('vat-summary', ['Month', 'Gross sales (incl VAT)', 'Refunds', 'Sales excl VAT', 'Output VAT'], (
+            [r['month'].strftime('%Y-%m'), r['gross'], r['refunds'], r['net_sales'], r['net_vat']] for r in rows
+        ))
+    return render(request, 'reports/vat.html', {
+        'rows': rows, 'rate': rate, 'branch': branch,
+        'branches': Branch.objects.filter(is_active=True).order_by('name'),
     })

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}VAT Summary{% endblock %}
+{% block page_title %}Reports / VAT Summary{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h3>VAT Summary</h3>
+        <div class="text-muted small">VAT {{ rate|floatformat:0 }}% · {% if branch %}{{ branch.name }}{% else %}All branches{% endif %} · {{ shop.business_name }}{% if shop.kra_pin %} · PIN {{ shop.kra_pin }}{% endif %}</div>
+    </div>
+    <div class="d-flex gap-2 d-print-none">
+        {% if user.role == 'OWNER' %}
+        <form method="get"><select name="branch" class="form-select" onchange="this.form.submit()">
+            <option value="">All branches</option>
+            {% for b in branches %}<option value="{{ b.id }}" {% if branch.id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select></form>
+        {% endif %}
+        <a href="?{% query_replace export='csv' %}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> CSV</a>
+    </div>
+</div>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Month</th><th class="text-end">Gross sales (incl. VAT)</th><th class="text-end">Refunds</th><th class="text-end">Sales excl. VAT</th><th class="text-end">Output VAT</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td class="fw-semibold">{{ r.month|date:"F Y" }}</td>
+        <td class="text-end money">{{ r.gross|money }}</td>
+        <td class="text-end money text-muted">{% if r.refunds %}-{{ r.refunds|money }}{% endif %}</td>
+        <td class="text-end money">{{ r.net_sales|money }}</td>
+        <td class="text-end money fw-bold">{{ r.net_vat|money }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="text-center text-muted py-4">No sales yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="small text-muted mt-2">Selling prices are treated as VAT-inclusive. Input VAT on purchases is not tracked here — confirm figures with your accountant before filing.</p>
+{% endblock %}

@@ -11,4 +11,5 @@ urlpatterns = [
     path('staff/', reports.staff_performance, name='staff_performance'),
     path('debt-aging/', reports.debt_aging, name='debt_aging'),
     path('reorder/', reports.reorder, name='reorder'),
+    path('vat/', reports.vat_summary, name='vat'),
 ]
