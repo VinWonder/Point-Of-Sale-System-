@@ -49,10 +49,11 @@
         <div class="nav-section">Management</div>
         <a class="nav-link {% if ns == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}"><i class="bi bi-bar-chart-line"></i> Reports</a>
         <a class="nav-link {% if ns == 'branches' and 'branch' in url_name %}active{% endif %}" href="{% url 'branches:branch_list' %}"><i class="bi bi-shop-window"></i> Branches</a>
-        <a class="nav-link {% if ns == 'accounts' %}active{% endif %}" href="{% url 'accounts:staff_list' %}"><i class="bi bi-person-badge"></i> Staff</a>
+        <a class="nav-link {% if ns == 'accounts' and url_name != 'audit_log' %}active{% endif %}" href="{% url 'accounts:staff_list' %}"><i class="bi bi-person-badge"></i> Staff</a>
         {% endif %}
         {% if user.role == 'OWNER' %}
         <a class="nav-link {% if ns == 'core' %}active{% endif %}" href="{% url 'core:settings' %}"><i class="bi bi-sliders2"></i> Shop Settings</a>
+        <a class="nav-link {% if url_name == 'audit_log' %}active{% endif %}" href="{% url 'accounts:audit_log' %}"><i class="bi bi-shield-check"></i> Audit Log</a>
         {% endif %}
         {% if user.is_superuser %}
         <a class="nav-link" href="/admin/"><i class="bi bi-gear"></i> Admin</a>

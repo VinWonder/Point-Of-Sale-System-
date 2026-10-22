@@ -79,3 +79,26 @@ def change_password(request):
         messages.success(request, 'Your password has been changed.')
         return redirect('dashboard:index')
     return render(request, 'accounts/staff_form.html', {'form': form, 'title': 'Change my password'})
+
+
+@role_required(User.Role.OWNER)
+def audit_log(request):
+    from core.utils import paginate
+    from .models import AuditLog
+
+    logs = AuditLog.objects.select_related('user')
+    user_id = request.GET.get('user', '')
+    if user_id.isdigit():
+        logs = logs.filter(user_id=user_id)
+    entity = request.GET.get('entity', '')
+    if entity:
+        logs = logs.filter(entity=entity)
+    q = request.GET.get('q', '').strip()
+    if q:
+        logs = logs.filter(Q(action__icontains=q) | Q(details__icontains=q) | Q(entity_id=q))
+    return render(request, 'accounts/audit_log.html', {
+        'page_obj': paginate(request, logs, per_page=50),
+        'users': User.objects.order_by('username'),
+        'entities': AuditLog.objects.order_by().values_list('entity', flat=True).distinct(),
+        'current_user': user_id, 'current_entity': entity, 'q': q,
+    })
