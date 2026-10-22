@@ -251,8 +251,27 @@ def sale_list(request):
 
 @login_required
 def quotation_list(request):
-    quotations = Quotation.objects.select_related('customer', 'branch').order_by('-created_at')[:100]
-    return render(request, 'sales/quotation_list.html', {'quotations': quotations})
+    quotations = Quotation.objects.select_related('customer', 'branch', 'created_by').prefetch_related('items')
+    if request.user.role == User.Role.CASHIER and request.user.branch_id:
+        quotations = quotations.filter(branch_id=request.user.branch_id)
+    status = request.GET.get('status', 'open')
+    today = timezone.localdate()
+    if status == 'open':
+        quotations = quotations.filter(status=Quotation.Status.DRAFT).exclude(valid_until__lt=today)
+    elif status == 'expired':
+        quotations = quotations.filter(status=Quotation.Status.DRAFT, valid_until__lt=today)
+    elif status == 'converted':
+        quotations = quotations.filter(status=Quotation.Status.CONVERTED)
+    q = request.GET.get('q', '').strip()
+    if q:
+        query = Q(customer__name__icontains=q) | Q(customer__phone_number__icontains=q) | Q(notes__icontains=q)
+        if q.lstrip('#').isdigit():
+            query |= Q(pk=int(q.lstrip('#')))
+        quotations = quotations.filter(query)
+    return render(request, 'sales/quotation_list.html', {
+        'page_obj': paginate(request, quotations.order_by('-created_at')),
+        'status': status, 'q': q,
+    })
 
 
 @role_required(User.Role.OWNER, User.Role.MANAGER)

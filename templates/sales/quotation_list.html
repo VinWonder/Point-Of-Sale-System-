@@ -1,21 +1,48 @@
 {% extends "base.html" %}
+{% load pos_tags %}
 {% block title %}Quotations{% endblock %}
+{% block page_title %}Quotations{% endblock %}
 {% block content %}
-<h3>Quotations</h3>
-<table class="table table-striped">
-    <thead><tr><th>#</th><th>Customer</th><th>Branch</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>
+<div class="page-header">
+    <h3>Quotations</h3>
+    <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> New quotation (from POS)</a>
+</div>
+<form method="get" class="filter-bar row g-2 align-items-center">
+    <div class="col-md-5"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Quote #, customer name or phone"></div>
+    <div class="col-md-7">
+        <div class="btn-group">
+            <button name="status" value="open" class="btn btn-sm {% if status == 'open' %}btn-dark{% else %}btn-outline-dark{% endif %}">Open</button>
+            <button name="status" value="expired" class="btn btn-sm {% if status == 'expired' %}btn-dark{% else %}btn-outline-dark{% endif %}">Expired</button>
+            <button name="status" value="converted" class="btn btn-sm {% if status == 'converted' %}btn-dark{% else %}btn-outline-dark{% endif %}">Converted</button>
+            <button name="status" value="all" class="btn btn-sm {% if status == 'all' %}btn-dark{% else %}btn-outline-dark{% endif %}">All</button>
+        </div>
+    </div>
+</form>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>#</th><th>Date</th><th>Customer</th><th>Branch</th><th>Items</th><th class="text-end">Total</th><th>Valid until</th><th>Status</th><th></th></tr></thead>
     <tbody>
-        {% for q in quotations %}
+        {% for qt in page_obj %}
         <tr>
-            <td>{{ q.id }}</td>
-            <td>{{ q.customer|default:"Walk-in" }}</td>
-            <td>{{ q.branch }}</td>
-            <td>KES {{ q.total }}</td>
-            <td><span class="badge bg-secondary">{{ q.status }}</span></td>
-            <td>{{ q.created_at|date:"d M Y H:i" }}</td>
-            <td><a href="{% url 'sales:quotation' q.id %}" class="btn btn-sm btn-outline-primary">View</a></td>
+            <td class="fw-semibold">Q-{{ qt.id }}</td>
+            <td class="small text-nowrap">{{ qt.created_at|date:"d M Y" }}<div class="text-muted">{{ qt.created_by.username|default:"" }}</div></td>
+            <td>{{ qt.customer|default:"Walk-in" }}{% if qt.notes %}<div class="small text-muted">{{ qt.notes|truncatechars:40 }}</div>{% endif %}</td>
+            <td class="small">{{ qt.branch }}</td>
+            <td class="small">{{ qt.items.all|length }}</td>
+            <td class="text-end money fw-semibold">{{ qt.total|money }}</td>
+            <td class="small {% if qt.is_expired and qt.status == 'DRAFT' %}text-danger{% endif %}">{{ qt.valid_until|date:"d M Y"|default:"—" }}</td>
+            <td>
+                {% if qt.status == 'CONVERTED' %}<span class="badge bg-success">Converted</span>
+                {% elif qt.is_expired %}<span class="badge bg-secondary">Expired</span>
+                {% else %}<span class="badge bg-info text-dark">Open</span>{% endif %}
+            </td>
+            <td class="text-end"><a href="{% url 'sales:quotation' qt.id %}" class="btn btn-sm btn-outline-secondary">Open</a></td>
         </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No quotations here.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% include "partials/pagination.html" %}
 {% endblock %}
