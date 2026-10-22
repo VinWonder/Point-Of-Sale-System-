@@ -1,0 +1,43 @@
+/* 80mm thermal receipt — also looks right on A4 */
+.receipt-layout { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+.receipt-actions { width: 300px; }
+
+.receipt-paper {
+    position: relative;
+    width: 80mm;
+    max-width: 100%;
+    background: #fff;
+    padding: 6mm 5mm;
+    font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #000;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, .12);
+}
+.r-shop { font-size: 16px; font-weight: 700; text-transform: uppercase; }
+.r-row { display: flex; justify-content: space-between; gap: 8px; }
+.r-row span:last-child { text-align: right; white-space: nowrap; }
+.r-total { font-size: 15px; font-weight: 700; margin-top: 2px; }
+.r-muted { color: #444; font-size: 11px; }
+.r-rule { border-top: 1px dashed #000; margin: 6px 0; }
+.r-item { margin-bottom: 3px; }
+
+.receipt-paper.voided { color: #666; }
+.void-stamp {
+    position: absolute;
+    top: 40%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-25deg);
+    font-size: 56px;
+    font-weight: 900;
+    color: rgba(220, 38, 38, .35);
+    border: 6px solid rgba(220, 38, 38, .35);
+    padding: 0 16px;
+    pointer-events: none;
+}
+
+@media print {
+    @page { size: 80mm auto; margin: 0; }
+    .topbar, .sidebar { display: none !important; }
+    .receipt-layout { display: block; }
+    .receipt-paper { box-shadow: none; width: 80mm; padding: 3mm; }
+}
