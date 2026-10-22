@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Profit & Loss{% endblock %}
+{% block page_title %}Reports / Profit &amp; Loss{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Profit &amp; Loss</h3>
+    <button onclick="window.print()" class="btn btn-outline-secondary d-print-none"><i class="bi bi-printer"></i> Print</button>
+</div>
+{% include "reports/_filters.html" %}
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="card">
+            <table class="table mb-0">
+                <tbody>
+                    <tr><td>Sales ({{ totals.count }} receipts)</td><td class="text-end money">{{ totals.revenue|add:totals.discount|money }}</td></tr>
+                    <tr><td class="ps-4 text-muted">less discounts given</td><td class="text-end money text-muted">-{{ totals.discount|money }}</td></tr>
+                    <tr><td class="ps-4 text-muted">less refunds on returns</td><td class="text-end money text-muted">-{{ totals.refunds|money }}</td></tr>
+                    <tr class="fw-semibold"><td>Net revenue</td><td class="text-end money">{{ totals.net_revenue|money }}</td></tr>
+                    <tr><td class="ps-4 text-muted">less cost of goods sold</td><td class="text-end money text-muted">-{{ totals.cost|money }}</td></tr>
+                    <tr class="fw-bold table-light"><td>Gross profit <span class="badge text-bg-light border">{{ totals.margin }}%</span></td><td class="text-end money">{{ totals.gross_profit|money }}</td></tr>
+                    {% for row in expense_rows %}
+                    <tr><td class="ps-4 text-muted">{{ row.label }}</td><td class="text-end money text-muted">-{{ row.total|money }}</td></tr>
+                    {% empty %}
+                    <tr><td class="ps-4 text-muted">No expenses recorded</td><td></td></tr>
+                    {% endfor %}
+                    <tr class="fw-semibold"><td>Total expenses</td><td class="text-end money">-{{ expense_total|money }}</td></tr>
+                    <tr class="fw-bold fs-5 {% if net_profit < 0 %}table-danger{% else %}table-success{% endif %}"><td>Net profit</td><td class="text-end money">{{ net_profit|money }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2">Cost of goods uses each item's cost price at the moment it was sold. Voided sales are excluded; returned items are removed from both revenue and cost.</p>
+    </div>
+    <div class="col-lg-5">
+        <div class="card stat-card mb-3"><div class="stat-label">Collected so far</div><div class="stat-value money">{{ totals.collected|money }}</div>
+            <div class="small text-muted">Still owed on these sales: {{ uncollected|money }}</div></div>
+        <div class="card stat-card mb-3"><div class="stat-label">VAT included in sales</div><div class="stat-value money">{{ totals.vat|money }}</div></div>
+        <div class="card stat-card"><div class="stat-label">Average sale</div><div class="stat-value money">{{ totals.average_sale|money }}</div></div>
+    </div>
+</div>
+{% endblock %}

@@ -47,6 +47,7 @@
 
         {% if user.role != 'CASHIER' %}
         <div class="nav-section">Management</div>
+        <a class="nav-link {% if ns == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}"><i class="bi bi-bar-chart-line"></i> Reports</a>
         <a class="nav-link {% if ns == 'branches' and 'branch' in url_name %}active{% endif %}" href="{% url 'branches:branch_list' %}"><i class="bi bi-shop-window"></i> Branches</a>
         <a class="nav-link {% if ns == 'accounts' %}active{% endif %}" href="{% url 'accounts:staff_list' %}"><i class="bi bi-person-badge"></i> Staff</a>
         {% endif %}

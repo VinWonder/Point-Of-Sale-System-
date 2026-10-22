@@ -1,0 +1,19 @@
+{# Shared period + branch filter for every report #}
+<form method="get" class="filter-bar d-print-none">
+    {% include "partials/date_filter.html" %}
+    {% if user.role == 'OWNER' %}
+    <div class="row g-2 mt-1">
+        <div class="col-md-4">
+            <select name="branch" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All branches</option>
+                {% for b in branches %}<option value="{{ b.id }}" {% if branch.id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <input type="hidden" name="range" value="{{ preset }}">
+    </div>
+    {% endif %}
+</form>
+<p class="text-muted small">
+    {% if start %}{{ start|date:"d M Y" }} – {{ end|date:"d M Y" }}{% else %}All time{% endif %}
+    · {% if branch %}{{ branch.name }}{% else %}All branches{% endif %}
+</p>
