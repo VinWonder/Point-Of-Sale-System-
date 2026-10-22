@@ -259,3 +259,54 @@ def purchase_mark_paid(request, purchase_id):
     log_action(request.user, f'Marked purchase #{purchase.pk} as paid', purchase)
     messages.success(request, f'Purchase #{purchase.pk} marked as paid.')
     return redirect(request.POST.get('next') or 'inventory:purchase_list')
+
+
+@login_required
+def product_export(request):
+    """Whole catalogue as CSV, in the same column layout the importer accepts."""
+    from core.exports import csv_response
+    from .importer import COLUMNS
+
+    products = Product.objects.select_related('category').order_by('name')
+    rows = (
+        [p.sku, p.name, p.barcode, p.brand, p.category.name if p.category else '', p.unit,
+         p.cost_price if request.user.role != User.Role.CASHIER else '', p.sell_price,
+         p.wholesale_price or '', p.wholesale_min_qty, p.reorder_level, '', '']
+        for p in products
+    )
+    return csv_response('products', COLUMNS, rows)
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def product_import(request):
+    from . import importer
+
+    errors, preview = [], None
+    if request.method == 'POST' and request.FILES.get('file'):
+        upload = request.FILES['file']
+        if upload.size > 5 * 1024 * 1024:
+            errors = ['File is too large (max 5 MB).']
+        else:
+            rows, errors = importer.parse(upload)
+            if not errors:
+                created, updated = importer.import_rows(rows, request.user)
+                log_action(request.user, f'Imported products: {created} new, {updated} updated', None,
+                           upload.name)
+                messages.success(request, f'Import complete: {created} new products, {updated} updated.')
+                return redirect('inventory:product_list')
+    return render(request, 'inventory/product_import.html', {
+        'errors': errors[:50], 'error_count': len(errors), 'columns': importer.COLUMNS, 'preview': preview,
+    })
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def product_import_template(request):
+    from core.exports import csv_response
+    from .importer import COLUMNS
+
+    return csv_response('product-import-template', COLUMNS, [
+        ['CEM-BAM-50', 'Bamburi Cement 50kg', '', 'Bamburi', 'Cement & Building', 'bag',
+         '680', '780', '750', '20', '20', 'Main Branch', '100'],
+        ['PNT-CRN-4L', 'Crown Emulsion White 4L', '6161100000012', 'Crown', 'Paint', 'tin',
+         '1500', '1850', '', '0', '5', '', ''],
+    ])

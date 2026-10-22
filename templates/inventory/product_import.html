@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Import Products{% endblock %}
+{% block page_title %}Products / Import{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-upload"></i> Import products from CSV</div>
+            <div class="card-body">
+                <p class="small text-muted">Rows are matched by <strong>SKU</strong>: existing products are updated, new SKUs are added.
+                    Fill <code>branch</code> and <code>stock_quantity</code> to set opening stock (recorded as an adjustment).
+                    If any row has a problem, nothing is imported.</p>
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="file" name="file" accept=".csv,text/csv" class="form-control mb-3" required>
+                    <button class="btn btn-accent">Import</button>
+                    <a href="{% url 'inventory:product_import_template' %}" class="btn btn-link"><i class="bi bi-filetype-csv"></i> Download template</a>
+                </form>
+                <p class="small text-muted mt-3 mb-0">Tip: save from Excel as <em>CSV UTF-8</em>. Columns: <code>{{ columns|join:", " }}</code>. Required: sku, name, cost_price, sell_price.</p>
+            </div>
+        </div>
+    </div>
+    {% if errors %}
+    <div class="col-lg-6">
+        <div class="card border-danger">
+            <div class="card-header text-danger"><i class="bi bi-x-circle"></i> {{ error_count }} problem{{ error_count|pluralize }} found — nothing was imported</div>
+            <ul class="list-group list-group-flush small">
+                {% for e in errors %}<li class="list-group-item">{{ e }}</li>{% endfor %}
+                {% if error_count > 50 %}<li class="list-group-item text-muted">…and {{ error_count|add:"-50" }} more</li>{% endif %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -9,6 +9,8 @@
     <div class="d-flex gap-2 flex-wrap">
         <a href="{% url 'inventory:product_create' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Add Product</a>
         <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-outline-secondary"><i class="bi bi-bag-plus"></i> Receive Stock</a>
+        <a href="{% url 'inventory:product_import' %}" class="btn btn-outline-secondary"><i class="bi bi-upload"></i> Import</a>
+        <a href="{% url 'inventory:product_export' %}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export</a>
     </div>
     {% endif %}
 </div>
