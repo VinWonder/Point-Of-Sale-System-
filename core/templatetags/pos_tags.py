@@ -22,3 +22,15 @@ def intcomma_plain(value):
         return f"{int(value):,}"
     except (TypeError, ValueError):
         return value
+
+
+@register.simple_tag(takes_context=True)
+def query_replace(context, **kwargs):
+    """Current querystring with some keys replaced — keeps filters when paging."""
+    query = context['request'].GET.copy()
+    for key, value in kwargs.items():
+        if value in (None, ''):
+            query.pop(key, None)
+        else:
+            query[key] = value
+    return query.urlencode()
