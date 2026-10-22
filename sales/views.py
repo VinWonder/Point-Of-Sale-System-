@@ -70,16 +70,20 @@ def create_sale(request):
     for line in items:
         product = get_object_or_404(Product, pk=line['product_id'])
         qty = line['qty']
-        SaleItem.objects.create(sale=sale, product=product, quantity=qty, unit_price=product.sell_price)
+        SaleItem.objects.create(sale=sale, product=product, quantity=qty, unit_price=product.sell_price,
+                                cost_price=product.cost_price)
 
         stock = stocks[line['product_id']]
         stock.quantity -= qty
         stock.save(update_fields=['quantity'])
 
+    sale.recalculate_totals()
+    sale.save()
+
     if payment_method == 'CASH':
         Payment.objects.create(sale=sale, method=Payment.Method.CASH, amount=sale.total, status=Payment.Status.SUCCESS)
-        sale.payment_status = Sale.PaymentStatus.PAID
-        sale.save(update_fields=['payment_status'])
+        sale.refresh_payment_status()
+        sale.save(update_fields=['payment_status', 'amount_paid'])
 
     elif payment_method == 'CREDIT':
         if not customer:
@@ -136,7 +140,10 @@ def convert_quotation(request, quotation_id):
         stock, _ = Stock.objects.get_or_create(product=item.product, branch=quotation.branch)
         stock.quantity -= item.quantity
         stock.save(update_fields=['quantity'])
-        SaleItem.objects.create(sale=sale, product=item.product, quantity=item.quantity, unit_price=item.unit_price)
+        SaleItem.objects.create(sale=sale, product=item.product, quantity=item.quantity, unit_price=item.unit_price,
+                                cost_price=item.product.cost_price)
+    sale.recalculate_totals()
+    sale.save()
 
     quotation.status = Quotation.Status.CONVERTED
     quotation.save(update_fields=['status'])

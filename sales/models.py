@@ -1,6 +1,17 @@
 from decimal import Decimal
 
 from django.db import models
+from django.utils import timezone
+
+
+TWO_PLACES = Decimal("0.01")
+
+
+def vat_portion(gross, rate):
+    """VAT contained in a VAT-inclusive amount, e.g. 116 @ 16% -> 16.00."""
+    if not rate:
+        return Decimal("0.00")
+    return (gross * rate / (Decimal("100") + rate)).quantize(TWO_PLACES)
 
 
 class Quotation(models.Model):
@@ -15,11 +26,17 @@ class Quotation(models.Model):
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     created_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    valid_until = models.DateField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
     def total(self):
         return sum((item.subtotal for item in self.items.all()), Decimal("0.00"))
+
+    @property
+    def is_expired(self):
+        return bool(self.valid_until and self.valid_until < timezone.localdate())
 
     def __str__(self):
         return f"Quotation #{self.pk} - {self.customer or 'Walk-in'}"
@@ -37,31 +54,96 @@ class QuotationItem(models.Model):
 
 
 class Sale(models.Model):
-    """A completed (or in-progress) sale/receipt, optionally converted from a quotation."""
+    """A completed sale/receipt, optionally converted from a quotation."""
 
     class PaymentStatus(models.TextChoices):
         UNPAID = "UNPAID", "Unpaid"
         PARTIAL = "PARTIAL", "Partially Paid"
         PAID = "PAID", "Paid"
 
+    class Status(models.TextChoices):
+        COMPLETED = "COMPLETED", "Completed"
+        PENDING_PAYMENT = "PENDING", "Awaiting payment"
+        VOIDED = "VOIDED", "Voided"
+
+    class SaleType(models.TextChoices):
+        CASH = "CASH", "Cash / immediate"
+        CREDIT = "CREDIT", "On account"
+
     quotation = models.ForeignKey(Quotation, on_delete=models.SET_NULL, null=True, blank=True)
     customer = models.ForeignKey("customers.Customer", on_delete=models.SET_NULL, null=True, blank=True)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     served_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.COMPLETED)
+    sale_type = models.CharField(max_length=10, choices=SaleType.choices, default=SaleType.CASH)
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID)
-    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Money is stored, not recomputed, so reports can aggregate in the database.
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    tax_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"), help_text="VAT included in total",
+    )
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    cash_tendered = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    voided_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="voided_sales"
+    )
+    voided_at = models.DateTimeField(null=True, blank=True)
+    void_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     @property
-    def total(self):
-        return sum((item.subtotal for item in self.items.all()), Decimal("0.00"))
-
-    @property
-    def amount_paid(self):
-        return sum((p.amount for p in self.payments.all()), Decimal("0.00"))
+    def receipt_number(self):
+        return f"R{self.branch_id:02d}-{self.pk:06d}" if self.pk else ""
 
     @property
     def balance_due(self):
         return self.total - self.amount_paid
+
+    @property
+    def change_given(self):
+        if self.cash_tendered is None:
+            return Decimal("0.00")
+        return max(self.cash_tendered - self.total, Decimal("0.00"))
+
+    @property
+    def cost_total(self):
+        return sum((item.cost_price * item.quantity for item in self.items.all()), Decimal("0.00"))
+
+    @property
+    def gross_profit(self):
+        return self.total - self.cost_total
+
+    @property
+    def is_voided(self):
+        return self.status == self.Status.VOIDED
+
+    def recalculate_totals(self, vat_rate=Decimal("0")):
+        """Recompute subtotal/total/VAT from the line items. Call after items change."""
+        self.subtotal = sum((item.subtotal for item in self.items.all()), Decimal("0.00"))
+        self.discount_amount = min(self.discount_amount, self.subtotal)
+        self.total = self.subtotal - self.discount_amount
+        self.tax_amount = vat_portion(self.total, Decimal(vat_rate))
+
+    def refresh_payment_status(self):
+        """Derive payment_status/amount_paid from successful payments."""
+        from payments.models import Payment
+        paid = self.payments.filter(status=Payment.Status.SUCCESS).aggregate(
+            s=models.Sum("amount"))["s"] or Decimal("0.00")
+        self.amount_paid = paid
+        if paid >= self.total:
+            self.payment_status = self.PaymentStatus.PAID
+        elif paid > 0:
+            self.payment_status = self.PaymentStatus.PARTIAL
+        else:
+            self.payment_status = self.PaymentStatus.UNPAID
 
     def __str__(self):
         return f"Receipt #{self.pk} - {self.branch}"
@@ -69,10 +151,19 @@ class Sale(models.Model):
 
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="items")
-    product = models.ForeignKey("inventory.Product", on_delete=models.CASCADE)
+    product = models.ForeignKey("inventory.Product", on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    cost_price = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00"),
+        help_text="Product cost at the time of sale, for accurate profit reports",
+    )
+    returned_quantity = models.PositiveIntegerField(default=0)
 
     @property
     def subtotal(self):
         return self.quantity * self.unit_price
+
+    @property
+    def returnable_quantity(self):
+        return self.quantity - self.returned_quantity

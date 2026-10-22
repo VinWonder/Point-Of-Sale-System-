@@ -74,11 +74,8 @@ def mpesa_callback(request):
 
     # Update the sale's payment_status based on total paid so far
     sale = payment.sale
-    if sale.balance_due <= 0:
-        sale.payment_status = sale.PaymentStatus.PAID
-    elif sale.amount_paid > 0:
-        sale.payment_status = sale.PaymentStatus.PARTIAL
-    sale.save(update_fields=['payment_status'])
+    sale.refresh_payment_status()
+    sale.save(update_fields=['payment_status', 'amount_paid'])
 
     return JsonResponse({'ResultCode': 0, 'ResultDesc': 'Accepted'})
 

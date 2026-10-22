@@ -21,6 +21,7 @@ class SaleItemInline(admin.TabularInline):
 
 @admin.register(Sale)
 class SaleAdmin(admin.ModelAdmin):
-    list_display = ('id', 'customer', 'branch', 'payment_status', 'total', 'balance_due', 'created_at')
-    list_filter = ('payment_status', 'branch')
+    list_display = ('id', 'customer', 'branch', 'status', 'payment_status', 'total', 'amount_paid', 'balance_due', 'created_at')
+    list_filter = ('status', 'payment_status', 'sale_type', 'branch')
+    readonly_fields = ('subtotal', 'total', 'tax_amount', 'amount_paid')
     inlines = [SaleItemInline]
