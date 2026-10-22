@@ -1,21 +1,88 @@
 {% extends "base.html" %}
+{% load pos_tags %}
 {% block title %}Sales History{% endblock %}
+{% block page_title %}Sales History{% endblock %}
 {% block content %}
-<h3>Recent Sales</h3>
-<table class="table table-striped">
-    <thead><tr><th>#</th><th>Customer</th><th>Branch</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>
+<div class="page-header">
+    <h3>Sales History</h3>
+    <div class="d-flex gap-2">
+        <a href="{% url 'sales:sale_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
+        <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-cart-plus"></i> New Sale</a>
+    </div>
+</div>
+
+<form method="get" class="filter-bar">
+    {% include "partials/date_filter.html" %}
+    <div class="row g-2 mt-1">
+        <div class="col-md-3"><input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Receipt #, customer, M-Pesa code"></div>
+        {% if user.role != 'CASHIER' %}
+        <div class="col-md-2">
+            <select name="branch" class="form-select form-select-sm">
+                <option value="">All branches</option>
+                {% for b in branches %}<option value="{{ b.id }}" {% if current_branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <div class="col-md-2">
+            <select name="cashier" class="form-select form-select-sm">
+                <option value="">All staff</option>
+                {% for c in cashiers %}<option value="{{ c.id }}" {% if current_cashier == c.id|stringformat:'s' %}selected{% endif %}>{{ c.username }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">Any status</option>
+                <option value="PAID" {% if status == 'PAID' %}selected{% endif %}>Paid</option>
+                <option value="PARTIAL" {% if status == 'PARTIAL' %}selected{% endif %}>Partially paid</option>
+                <option value="UNPAID" {% if status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
+                <option value="VOIDED" {% if status == 'VOIDED' %}selected{% endif %}>Voided</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="type" class="form-select form-select-sm">
+                <option value="">Cash &amp; credit</option>
+                <option value="CASH" {% if sale_type == 'CASH' %}selected{% endif %}>Immediate payment</option>
+                <option value="CREDIT" {% if sale_type == 'CREDIT' %}selected{% endif %}>On account</option>
+            </select>
+        </div>
+        <div class="col-md-1 d-grid"><button class="btn btn-sm btn-dark" name="range" value="{{ preset }}">Go</button></div>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Sales</div><div class="stat-value">{{ totals.count }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Revenue</div><div class="stat-value money">{{ totals.revenue|money }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Collected</div><div class="stat-value money text-success">{{ totals.paid|money }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Outstanding</div><div class="stat-value money {% if totals.outstanding > 0 %}text-danger{% endif %}">{{ totals.outstanding|money }}</div></div></div>
+</div>
+
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Receipt</th><th>Date</th><th>Customer</th><th>Branch</th><th>Served by</th><th class="text-end">Total</th><th class="text-end">Paid</th><th>Status</th><th></th></tr></thead>
     <tbody>
-        {% for s in sales %}
-        <tr>
-            <td>{{ s.id }}</td>
-            <td>{{ s.customer|default:"Walk-in" }}</td>
-            <td>{{ s.branch }}</td>
-            <td>KES {{ s.total }}</td>
-            <td><span class="badge bg-{% if s.payment_status == 'PAID' %}success{% elif s.payment_status == 'PARTIAL' %}warning{% else %}danger{% endif %}">{{ s.payment_status }}</span></td>
-            <td>{{ s.created_at|date:"d M Y H:i" }}</td>
-            <td><a href="{% url 'sales:receipt' s.id %}" class="btn btn-sm btn-outline-primary">View Receipt</a></td>
+        {% for s in page_obj %}
+        <tr class="{% if s.is_voided %}text-muted text-decoration-line-through{% endif %}">
+            <td class="fw-semibold">{{ s.receipt_number }}</td>
+            <td class="small text-nowrap">{{ s.created_at|date:"d M Y H:i" }}</td>
+            <td>{% if s.customer %}<a href="{% url 'customers:customer_detail' s.customer.id %}">{{ s.customer.name }}</a>{% else %}<span class="text-muted">Walk-in</span>{% endif %}</td>
+            <td class="small">{{ s.branch }}</td>
+            <td class="small">{{ s.served_by.username|default:"—" }}</td>
+            <td class="text-end money fw-semibold">{{ s.total|money }}</td>
+            <td class="text-end money">{{ s.amount_paid|money }}</td>
+            <td>
+                {% if s.is_voided %}<span class="badge bg-secondary">Voided</span>
+                {% else %}
+                <span class="badge bg-{% if s.payment_status == 'PAID' %}success{% elif s.payment_status == 'PARTIAL' %}warning text-dark{% else %}danger{% endif %}">{{ s.get_payment_status_display }}</span>
+                {% if s.sale_type == 'CREDIT' %}<span class="badge text-bg-light border">Account</span>{% endif %}
+                {% endif %}
+            </td>
+            <td class="text-end"><a href="{% url 'sales:receipt' s.id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-receipt"></i></a></td>
         </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No sales in this period.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% include "partials/pagination.html" %}
 {% endblock %}

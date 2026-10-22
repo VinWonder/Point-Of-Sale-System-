@@ -13,4 +13,5 @@ urlpatterns = [
     path('receipt/<int:sale_id>/', views.receipt, name='receipt'),
     path('<int:sale_id>/void/', views.void_sale_view, name='void_sale'),
     path('history/', views.sale_list, name='sale_list'),
+    path('history/export/', views.sale_export, name='sale_export'),
 ]

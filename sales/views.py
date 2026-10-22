@@ -1,9 +1,12 @@
 import json
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Count, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
@@ -12,7 +15,10 @@ from django.views.decorators.http import require_POST
 from accounts.audit import log_action
 from accounts.decorators import role_required
 from accounts.models import User
+from core.exports import csv_response
+from core.filters import PRESETS, date_range_from_request, filter_by_date
 from core.models import ShopSettings
+from core.utils import paginate
 from customers.models import Customer
 from inventory.models import Category, Product, Stock
 from payments.mpesa import simulation_enabled
@@ -180,10 +186,62 @@ def quotation_view(request, quotation_id):
     return render(request, 'sales/quotation.html', {'quotation': quotation})
 
 
+def filtered_sales(request):
+    """Sales matching the history page filters. Cashiers only see their own branch."""
+    start, end, preset = date_range_from_request(request)
+    sales = filter_by_date(
+        Sale.objects.select_related('customer', 'branch', 'served_by'), start, end,
+    )
+    branch = request.GET.get('branch', '')
+    if request.user.role == User.Role.CASHIER:
+        branch = str(request.user.branch_id or '')
+    if branch.isdigit():
+        sales = sales.filter(branch_id=branch)
+    cashier = request.GET.get('cashier', '')
+    if cashier.isdigit():
+        sales = sales.filter(served_by_id=cashier)
+    status = request.GET.get('status', '')
+    if status in Sale.PaymentStatus.values:
+        sales = sales.filter(payment_status=status).exclude(status=Sale.Status.VOIDED)
+    elif status == 'VOIDED':
+        sales = sales.filter(status=Sale.Status.VOIDED)
+    sale_type = request.GET.get('type', '')
+    if sale_type in Sale.SaleType.values:
+        sales = sales.filter(sale_type=sale_type)
+    q = request.GET.get('q', '').strip()
+    if q:
+        number = q.upper().split('-')[-1].lstrip('R0') or '0'
+        query = Q(customer__name__icontains=q) | Q(customer__phone_number__icontains=q)             | Q(payments__mpesa_receipt_number__iexact=q)
+        if number.isdigit():
+            query |= Q(pk=int(number))
+        sales = sales.filter(query).distinct()
+    filters = {
+        'start': start, 'end': end, 'preset': preset, 'current_branch': branch,
+        'current_cashier': cashier, 'status': status, 'sale_type': sale_type, 'q': q,
+    }
+    return sales.order_by('-created_at'), filters
+
+
 @login_required
 def sale_list(request):
-    sales = Sale.objects.select_related('customer', 'branch').order_by('-created_at')[:100]
-    return render(request, 'sales/sale_list.html', {'sales': sales})
+    from branches.models import Branch
+
+    sales, filters = filtered_sales(request)
+    live = sales.exclude(status=Sale.Status.VOIDED)
+    totals = live.aggregate(
+        revenue=Coalesce(Sum('total'), Value(Decimal('0.00'))),
+        paid=Coalesce(Sum('amount_paid'), Value(Decimal('0.00'))),
+        count=Count('id'),
+    )
+    totals['outstanding'] = totals['revenue'] - totals['paid']
+    return render(request, 'sales/sale_list.html', {
+        'page_obj': paginate(request, sales),
+        'totals': totals,
+        'branches': Branch.objects.order_by('name'),
+        'cashiers': User.objects.filter(sale__isnull=False).distinct().order_by('username'),
+        'date_presets': PRESETS,
+        **filters,
+    })
 
 
 @login_required
@@ -208,3 +266,22 @@ def void_sale_view(request, sale_id):
             msg += f' Refund KES {sale.amount_paid:,.2f} to the customer.'
         messages.success(request, msg)
     return redirect('sales:receipt', sale_id=sale.id)
+
+
+@login_required
+def sale_export(request):
+    """Download the filtered sales history as CSV (for the accountant / KRA returns)."""
+    sales, _ = filtered_sales(request)
+    rows = (
+        [
+            s.receipt_number, timezone.localtime(s.created_at).strftime('%Y-%m-%d %H:%M'), s.branch.name,
+            s.served_by.username if s.served_by else '', s.customer.name if s.customer else 'Walk-in',
+            s.get_sale_type_display(), s.get_status_display(), s.get_payment_status_display(),
+            s.subtotal, s.discount_amount, s.total, s.tax_amount, s.amount_paid, s.balance_due,
+        ]
+        for s in sales.iterator()
+    )
+    return csv_response('sales', [
+        'Receipt', 'Date', 'Branch', 'Served by', 'Customer', 'Type', 'Status', 'Payment',
+        'Subtotal', 'Discount', 'Total', 'VAT', 'Paid', 'Balance',
+    ], rows)
