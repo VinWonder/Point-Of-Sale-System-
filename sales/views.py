@@ -1,17 +1,27 @@
 import json
-from decimal import Decimal
+from datetime import timedelta
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from django.views.decorators.csrf import csrf_exempt
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.audit import log_action
+from core.models import ShopSettings
 from customers.models import Customer
-from inventory.models import Product, Stock
-from payments.models import Payment
-from .models import Sale, SaleItem, Quotation, QuotationItem
+from inventory.models import Product
+from .models import Sale, Quotation, QuotationItem
+from .services import SaleError, checkout, parse_lines
+
+
+def _json_body(request):
+    try:
+        return json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        raise SaleError('Malformed request.')
 
 
 @login_required
@@ -23,137 +33,105 @@ def pos_screen(request):
 
 @login_required
 @require_POST
-@transaction.atomic
 def create_sale(request):
     """
-    Creates a Sale from the POS cart, enforcing:
-    - customer defaulter block (cannot buy while balance_owed > credit_limit)
-    - stock availability + deduction at the cashier's branch
-    - immediate PAID status for cash, UNPAID pending confirmation for M-Pesa,
-      or added straight to the customer's balance_owed for 'on account' credit sales
+    Creates a Sale from the POS cart. All rules (defaulter block, credit
+    limit, stock, discounts) are enforced in sales.services.checkout.
     """
-    data = json.loads(request.body)
-    customer_id = data.get('customer_id')
-    items = data.get('items', [])
-    payment_method = data.get('payment_method')  # CASH | MPESA | CREDIT
+    try:
+        data = _json_body(request)
+        customer = None
+        if data.get('customer_id'):
+            customer = get_object_or_404(Customer, pk=data['customer_id'])
+        sale = checkout(
+            user=request.user,
+            branch=request.user.branch,
+            raw_items=data.get('items', []),
+            customer=customer,
+            payment_method=data.get('payment_method'),
+            discount=data.get('discount') or 0,
+            cash_tendered=data.get('cash_tendered'),
+            notes=data.get('notes', ''),
+        )
+    except SaleError as exc:
+        return JsonResponse({'error': str(exc)}, status=exc.status)
 
-    if not items:
-        return JsonResponse({'error': 'Cart is empty.'}, status=400)
-
-    branch = request.user.branch
-    if not branch:
-        return JsonResponse({'error': 'Your account is not assigned to a branch. Contact your manager.'}, status=400)
-
-    customer = None
-    if customer_id:
-        customer = get_object_or_404(Customer, pk=customer_id)
-        if customer.is_defaulter:
-            return JsonResponse({
-                'error': f'{customer.name} owes KES {customer.balance_owed} and has exceeded their credit '
-                         f'limit of KES {customer.credit_limit}. Settle the outstanding balance before a new sale.'
-            }, status=403)
-
-    # Validate stock availability up-front, before creating anything
-    stocks = {}
-    for line in items:
-        product = get_object_or_404(Product, pk=line['product_id'])
-        stock = Stock.objects.select_for_update().filter(product=product, branch=branch).first()
-        available = stock.quantity if stock else 0
-        if available < line['qty']:
-            return JsonResponse({
-                'error': f'Not enough stock for {product.name} at {branch.name} (available: {available}).'
-            }, status=400)
-        stocks[line['product_id']] = stock
-
-    sale = Sale.objects.create(customer=customer, branch=branch, served_by=request.user)
-
-    for line in items:
-        product = get_object_or_404(Product, pk=line['product_id'])
-        qty = line['qty']
-        SaleItem.objects.create(sale=sale, product=product, quantity=qty, unit_price=product.sell_price,
-                                cost_price=product.cost_price)
-
-        stock = stocks[line['product_id']]
-        stock.quantity -= qty
-        stock.save(update_fields=['quantity'])
-
-    sale.recalculate_totals()
-    sale.save()
-
-    if payment_method == 'CASH':
-        Payment.objects.create(sale=sale, method=Payment.Method.CASH, amount=sale.total, status=Payment.Status.SUCCESS)
-        sale.refresh_payment_status()
-        sale.save(update_fields=['payment_status', 'amount_paid'])
-
-    elif payment_method == 'CREDIT':
-        if not customer:
-            return JsonResponse({'error': 'A customer must be selected for credit/on-account sales.'}, status=400)
-        customer.balance_owed += sale.total
-        customer.save(update_fields=['balance_owed'])
-        # payment_status stays UNPAID until the customer later pays down their balance
-
-    # For MPESA: sale stays UNPAID; the frontend calls payments:mpesa_initiate next,
-    # and the M-Pesa callback marks it PAID once Safaricom confirms.
-
-    return JsonResponse({'sale_id': sale.id, 'total': str(sale.total), 'payment_method': payment_method})
+    return JsonResponse({
+        'sale_id': sale.id,
+        'total': str(sale.total),
+        'change': str(sale.change_given),
+        'payment_method': data.get('payment_method'),
+    })
 
 
 @login_required
 @require_POST
 def create_quotation(request):
     """Creates a printable Quotation (no stock deduction — nothing has been sold yet)."""
-    data = json.loads(request.body)
+    try:
+        data = _json_body(request)
+        if not request.user.branch_id:
+            raise SaleError('Your account is not assigned to a branch. Contact your manager.')
+        lines = parse_lines(data.get('items', []))
+    except SaleError as exc:
+        return JsonResponse({'error': str(exc)}, status=exc.status)
+
     customer_id = data.get('customer_id')
-    items = data.get('items', [])
-
-    if not items:
-        return JsonResponse({'error': 'Cart is empty.'}, status=400)
-
-    branch = request.user.branch
     customer = get_object_or_404(Customer, pk=customer_id) if customer_id else None
+    validity = ShopSettings.load().quotation_validity_days
 
-    quotation = Quotation.objects.create(customer=customer, branch=branch, created_by=request.user)
-    for line in items:
-        product = get_object_or_404(Product, pk=line['product_id'])
-        QuotationItem.objects.create(
-            quotation=quotation, product=product, quantity=line['qty'], unit_price=product.sell_price
+    with transaction.atomic():
+        quotation = Quotation.objects.create(
+            customer=customer, branch=request.user.branch, created_by=request.user,
+            valid_until=timezone.localdate() + timedelta(days=validity),
+            notes=str(data.get('notes', ''))[:255],
         )
-
+        for product, qty in lines.items():
+            QuotationItem.objects.create(
+                quotation=quotation, product=product, quantity=qty,
+                unit_price=product.price_for_quantity(qty),
+            )
+    log_action(request.user, f'Created quotation #{quotation.pk}', quotation)
     return JsonResponse({'quotation_id': quotation.id})
 
 
 @login_required
-@transaction.atomic
+@require_POST
 def convert_quotation(request, quotation_id):
-    """Customer accepted the quote — turn it into a real sale (stock deducted, defaulter-checked)."""
+    """Customer accepted the quote — turn it into a real sale at the quoted prices."""
     quotation = get_object_or_404(Quotation, pk=quotation_id, status=Quotation.Status.DRAFT)
-
-    if quotation.customer and quotation.customer.is_defaulter:
-        from django.contrib import messages
-        messages.error(request, f'{quotation.customer.name} has an outstanding balance. Settle it before converting this quotation to a sale.')
+    if quotation.is_expired:
+        messages.error(request, 'This quotation has expired. Create a new one with current prices.')
         return redirect('sales:quotation', quotation_id=quotation.id)
 
-    sale = Sale.objects.create(
-        quotation=quotation, customer=quotation.customer, branch=quotation.branch, served_by=request.user
-    )
-    for item in quotation.items.all():
-        stock, _ = Stock.objects.get_or_create(product=item.product, branch=quotation.branch)
-        stock.quantity -= item.quantity
-        stock.save(update_fields=['quantity'])
-        SaleItem.objects.create(sale=sale, product=item.product, quantity=item.quantity, unit_price=item.unit_price,
-                                cost_price=item.product.cost_price)
-    sale.recalculate_totals()
-    sale.save()
+    payment_method = request.POST.get('payment_method', 'CASH')
+    items = list(quotation.items.select_related('product'))
+    lines = {}
+    for item in items:
+        lines[item.product] = lines.get(item.product, 0) + item.quantity
+    prices = {item.product_id: item.unit_price for item in items}
 
-    quotation.status = Quotation.Status.CONVERTED
-    quotation.save(update_fields=['status'])
+    try:
+        with transaction.atomic():
+            sale = checkout(
+                user=request.user, branch=quotation.branch, lines=lines, customer=quotation.customer,
+                payment_method=payment_method, quotation=quotation, prices=prices,
+            )
+            quotation.status = Quotation.Status.CONVERTED
+            quotation.save(update_fields=['status'])
+    except SaleError as exc:
+        messages.error(request, str(exc))
+        return redirect('sales:quotation', quotation_id=quotation.id)
 
+    messages.success(request, f'Quotation #{quotation.id} converted to sale #{sale.id}.')
     return redirect('sales:receipt', sale_id=sale.id)
 
 
 @login_required
 def receipt(request, sale_id):
-    sale = get_object_or_404(Sale, pk=sale_id)
+    sale = get_object_or_404(
+        Sale.objects.select_related('branch', 'customer', 'served_by'), pk=sale_id
+    )
     return render(request, 'sales/receipt.html', {'sale': sale})
 
 

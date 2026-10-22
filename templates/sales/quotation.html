@@ -20,12 +20,17 @@
             </tbody>
         </table>
         <h5 class="text-end">Total: KES {{ quotation.total }}</h5>
-        <p class="text-muted">This quotation is valid for 7 days.</p>
+        {% if quotation.valid_until %}<p class="text-muted">Valid until {{ quotation.valid_until|date:"d M Y" }}{% if quotation.is_expired %} <span class="badge bg-danger">Expired</span>{% endif %}</p>{% endif %}
         <div class="d-grid gap-2">
             <button onclick="window.print()" class="btn btn-primary d-print-none">Print Quotation</button>
             {% if quotation.status == 'DRAFT' %}
             <form method="post" action="{% url 'sales:convert_quotation' quotation.id %}" class="d-print-none">
                 {% csrf_token %}
+                <select name="payment_method" class="form-select mb-2">
+                    <option value="CASH">Paid in cash</option>
+                    <option value="CARD">Paid by card</option>
+                    {% if quotation.customer %}<option value="CREDIT">Charge to customer account</option>{% endif %}
+                </select>
                 <button type="submit" class="btn btn-success w-100">Customer Accepted — Convert to Sale</button>
             </form>
             {% endif %}
