@@ -1,13 +1,55 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 {% block title %}{{ title }}{% endblock %}
+{% block page_title %}Products / {{ title }}{% endblock %}
 {% block content %}
-<div class="col-md-6">
-    <h3>{{ title }}</h3>
-    <form method="post">
-        {% csrf_token %}
-        {{ form|crispy }}
-        <button type="submit" class="btn btn-primary mt-2">Save</button>
-    </form>
-</div>
+<form method="post" x-data="{ cost: parseFloat('{{ form.cost_price.value|default:0|escapejs }}') || 0, sell: parseFloat('{{ form.sell_price.value|default:0|escapejs }}') || 0 }">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">Product details</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">{{ form.sku|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.barcode|as_crispy_field }}</div>
+                    </div>
+                    {{ form.name|as_crispy_field }}
+                    <div class="row">
+                        <div class="col-md-6">{{ form.brand|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.category|as_crispy_field }}</div>
+                    </div>
+                    {{ form.unit|as_crispy_field }}
+                    {{ form.description|as_crispy_field }}
+                    {{ form.is_active|as_crispy_field }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">Pricing &amp; stock rules</div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6"><div @input="cost = parseFloat($event.target.value) || 0">{{ form.cost_price|as_crispy_field }}</div></div>
+                        <div class="col-md-6"><div @input="sell = parseFloat($event.target.value) || 0">{{ form.sell_price|as_crispy_field }}</div></div>
+                    </div>
+                    <div class="alert py-2 small" :class="sell < cost ? 'alert-danger' : 'alert-light border'">
+                        Margin: <strong x-text="sell ? ((sell - cost) / sell * 100).toFixed(1) + '%' : '—'"></strong>
+                        (<span x-text="'KES ' + (sell - cost).toLocaleString()"></span> per unit)
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">{{ form.wholesale_price|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.wholesale_min_qty|as_crispy_field }}</div>
+                    </div>
+                    {{ form.reorder_level|as_crispy_field }}
+                </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-accent btn-lg">Save product</button>
+                <a href="{% url 'inventory:product_list' %}" class="btn btn-link">Cancel</a>
+            </div>
+        </div>
+    </div>
+</form>
 {% endblock %}
