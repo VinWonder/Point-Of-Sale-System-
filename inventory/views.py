@@ -310,3 +310,20 @@ def product_import_template(request):
         ['PNT-CRN-4L', 'Crown Emulsion White 4L', '6161100000012', 'Crown', 'Paint', 'tin',
          '1500', '1850', '', '0', '5', '', ''],
     ])
+
+
+@login_required
+def shelf_labels(request):
+    """Printable shelf-edge price labels with scannable barcodes."""
+    products = Product.objects.filter(is_active=True).select_related('category').order_by('category__name', 'name')
+    category = request.GET.get('category', '')
+    if category.isdigit():
+        products = products.filter(category_id=category)
+    q = request.GET.get('q', '').strip()
+    if q:
+        products = products.filter(Q(name__icontains=q) | Q(sku__icontains=q) | Q(brand__icontains=q))
+    return render(request, 'inventory/shelf_labels.html', {
+        'products': products[:300],
+        'categories': Category.objects.order_by('name'),
+        'current_category': category, 'q': q,
+    })

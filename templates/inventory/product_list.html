@@ -11,6 +11,7 @@
         <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-outline-secondary"><i class="bi bi-bag-plus"></i> Receive Stock</a>
         <a href="{% url 'inventory:product_import' %}" class="btn btn-outline-secondary"><i class="bi bi-upload"></i> Import</a>
         <a href="{% url 'inventory:product_export' %}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export</a>
+        <a href="{% url 'inventory:shelf_labels' %}{% if current_category %}?category={{ current_category }}{% endif %}" class="btn btn-outline-secondary"><i class="bi bi-tags"></i> Shelf labels</a>
     </div>
     {% endif %}
 </div>

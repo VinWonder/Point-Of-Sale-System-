@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Shelf Labels{% endblock %}
+{% block page_title %}Products / Shelf Labels{% endblock %}
+{% block extra_head %}
+<style>
+    .label-sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+    .shelf-label {
+        background: #fff; border: 1px dashed #94a3b8; border-radius: 4px;
+        padding: 3mm 4mm; height: 38mm; display: flex; flex-direction: column; justify-content: space-between;
+        page-break-inside: avoid; break-inside: avoid;
+    }
+    .shelf-label .name { font-weight: 700; font-size: 12px; line-height: 1.2; max-height: 2.4em; overflow: hidden; }
+    .shelf-label .price { font-size: 22px; font-weight: 800; }
+    .shelf-label .price small { font-size: 11px; font-weight: 600; }
+    .shelf-label .bulk { font-size: 10px; }
+    .shelf-label svg { width: 100%; height: 11mm; }
+    @media print {
+        @page { size: A4; margin: 8mm; }
+        .topbar, .sidebar { display: none !important; }
+        .shelf-label { border-color: #cbd5e1; }
+    }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header d-print-none">
+    <h3>Shelf Labels <span class="text-muted fs-6">({{ products|length }})</span></h3>
+    <button onclick="window.print()" class="btn btn-accent" {% if not products %}disabled{% endif %}><i class="bi bi-printer"></i> Print labels</button>
+</div>
+<form method="get" class="filter-bar row g-2 d-print-none">
+    <div class="col-md-5"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Name, SKU or brand"></div>
+    <div class="col-md-4">
+        <select name="category" class="form-select" onchange="this.form.submit()">
+            <option value="">All categories</option>
+            {% for c in categories %}<option value="{{ c.id }}" {% if current_category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3 d-grid"><button class="btn btn-dark">Filter</button></div>
+</form>
+<div class="label-sheet">
+    {% for p in products %}
+    <div class="shelf-label">
+        <div class="name">{{ p.name }}</div>
+        <div class="d-flex justify-content-between align-items-end">
+            <div class="price">{{ p.sell_price|floatformat:"0g" }} <small>KES / {{ p.unit }}</small></div>
+            {% if p.wholesale_price %}<div class="bulk text-end">{{ p.wholesale_min_qty }}+ @ <strong>{{ p.wholesale_price|floatformat:"0g" }}</strong></div>{% endif %}
+        </div>
+        <svg class="barcode" data-code="{{ p.barcode|default:p.sku }}"></svg>
+    </div>
+    {% empty %}
+    <p class="text-muted">No products match.</p>
+    {% endfor %}
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script>
+document.querySelectorAll('svg.barcode').forEach(function (el) {
+    try {
+        JsBarcode(el, el.dataset.code, { format: 'CODE128', displayValue: true, fontSize: 11, height: 28, margin: 0 });
+    } catch (e) {
+        el.outerHTML = '<div class="small text-muted">' + el.dataset.code + '</div>';
+    }
+});
+</script>
+{% endblock %}

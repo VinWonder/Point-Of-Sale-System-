@@ -6,6 +6,7 @@ app_name = 'inventory'
 urlpatterns = [
     path('', views.product_list, name='product_list'),
     path('create/', views.product_create, name='product_create'),
+    path('labels/', views.shelf_labels, name='shelf_labels'),
     path('export/', views.product_export, name='product_export'),
     path('import/', views.product_import, name='product_import'),
     path('import/template/', views.product_import_template, name='product_import_template'),
