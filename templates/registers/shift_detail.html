@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Shift #{{ shift.id }}{% endblock %}
+{% block page_title %}Till / Shift #{{ shift.id }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h3>Z-Report · Shift #{{ shift.id }}</h3>
+        <div class="text-muted small">{{ shift.cashier.get_full_name|default:shift.cashier.username }} · {{ shift.branch.name }} ·
+            {{ shift.opened_at|date:"d M Y H:i" }} – {% if shift.closed_at %}{{ shift.closed_at|date:"d M Y H:i" }}{% else %}still open{% endif %}</div>
+    </div>
+    <button onclick="window.print()" class="btn btn-outline-secondary d-print-none"><i class="bi bi-printer"></i> Print</button>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">{% include "registers/_summary.html" %}</div></div></div>
+    {% if shift.status == 'CLOSED' %}
+    <div class="col-lg-5">
+        <div class="card stat-card mb-3">
+            <div class="stat-label">Counted cash</div><div class="stat-value money">{{ shift.counted_cash|money }}</div>
+            <div class="small text-muted">expected {{ shift.expected_cash|money }}</div>
+        </div>
+        <div class="card stat-card {% if shift.variance < 0 %}border-danger{% elif shift.variance > 0 %}border-warning{% else %}border-success{% endif %}">
+            <div class="stat-label">Variance</div>
+            <div class="stat-value money {% if shift.variance < 0 %}text-danger{% elif shift.variance > 0 %}text-warning{% else %}text-success{% endif %}">
+                {{ shift.variance|money }}
+            </div>
+            <div class="small">{% if shift.variance < 0 %}Cash short{% elif shift.variance > 0 %}Cash over{% else %}Balanced{% endif %}</div>
+        </div>
+        {% if shift.closing_notes %}<div class="card mt-3"><div class="card-body small">{{ shift.closing_notes }}</div></div>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

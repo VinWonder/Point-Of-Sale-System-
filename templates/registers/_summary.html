@@ -1,0 +1,26 @@
+{% load pos_tags %}
+<table class="table table-sm mb-0">
+    <tbody>
+        <tr><th colspan="2" class="text-muted small text-uppercase">Sales</th></tr>
+        <tr><td>Sales rung up</td><td class="text-end">{{ summary.sales_count }}{% if summary.voided_count %} <span class="text-muted small">(+{{ summary.voided_count }} voided)</span>{% endif %}</td></tr>
+        <tr><td>Sales value</td><td class="text-end money">{{ summary.sales_total|money }}</td></tr>
+        <tr><td>Of which on credit</td><td class="text-end money">{{ summary.credit_sales|money }}</td></tr>
+
+        <tr><th colspan="2" class="text-muted small text-uppercase pt-3">Payments received</th></tr>
+        {% for method, amount in summary.by_method.items %}
+        <tr><td>{{ method|title }} (sales)</td><td class="text-end money">{{ amount|money }}</td></tr>
+        {% empty %}
+        <tr><td colspan="2" class="text-muted">No sale payments yet.</td></tr>
+        {% endfor %}
+        {% for method, amount in summary.debt_by_method.items %}
+        <tr><td>{{ method|title }} (debt repayments)</td><td class="text-end money">{{ amount|money }}</td></tr>
+        {% endfor %}
+
+        <tr><th colspan="2" class="text-muted small text-uppercase pt-3">Cash drawer</th></tr>
+        <tr><td>Opening float</td><td class="text-end money">{{ summary.opening_float|money }}</td></tr>
+        <tr><td>+ Cash received</td><td class="text-end money">{{ summary.cash_in|money }}</td></tr>
+        <tr><td>− Cash refunds</td><td class="text-end money">{{ summary.cash_refunds|money }}</td></tr>
+        <tr><td>− Expenses paid from till</td><td class="text-end money">{{ summary.till_expenses|money }}</td></tr>
+        <tr class="fw-bold fs-5"><td>Expected in drawer</td><td class="text-end money">{{ summary.expected_cash|money }}</td></tr>
+    </tbody>
+</table>

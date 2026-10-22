@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Shifts{% endblock %}
+{% block page_title %}Till / Shifts{% endblock %}
+{% block content %}
+<div class="page-header"><h3>Shifts &amp; Cash-ups</h3></div>
+<form method="get" class="filter-bar">{% include "partials/date_filter.html" %}</form>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>#</th><th>Cashier</th><th>Branch</th><th>Opened</th><th>Closed</th><th class="text-end">Float</th><th class="text-end">Expected</th><th class="text-end">Counted</th><th class="text-end">Variance</th><th></th></tr></thead>
+    <tbody>
+    {% for s in page_obj %}
+    <tr>
+        <td>{{ s.id }}</td>
+        <td>{{ s.cashier.username }}</td>
+        <td class="small">{{ s.branch.name }}</td>
+        <td class="small text-nowrap">{{ s.opened_at|date:"d M H:i" }}</td>
+        <td class="small text-nowrap">{% if s.closed_at %}{{ s.closed_at|date:"d M H:i" }}{% else %}<span class="badge bg-success">Open</span>{% endif %}</td>
+        <td class="text-end money">{{ s.opening_float|money }}</td>
+        <td class="text-end money">{% if s.expected_cash is not None %}{{ s.expected_cash|money }}{% endif %}</td>
+        <td class="text-end money">{% if s.counted_cash is not None %}{{ s.counted_cash|money }}{% endif %}</td>
+        <td class="text-end money fw-semibold {% if s.variance < 0 %}text-danger{% elif s.variance > 0 %}text-warning{% else %}text-success{% endif %}">{% if s.variance is not None %}{{ s.variance|money }}{% endif %}</td>
+        <td class="text-end"><a href="{% url 'registers:shift_detail' s.id %}" class="btn btn-sm btn-outline-secondary">Z-report</a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="10" class="text-center text-muted py-4">No shifts in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}

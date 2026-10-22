@@ -31,6 +31,10 @@
         <a class="nav-link {% if 'quotation' in url_name %}active{% endif %}" href="{% url 'sales:quotation_list' %}"><i class="bi bi-file-earmark-text"></i> Quotations</a>
         <a class="nav-link {% if ns == 'customers' %}active{% endif %}" href="{% url 'customers:customer_list' %}"><i class="bi bi-people"></i> Customers</a>
 
+        <div class="nav-section">Till</div>
+        <a class="nav-link {% if ns == 'registers' and 'shift' in url_name %}active{% endif %}" href="{% url 'registers:my_shift' %}"><i class="bi bi-cash-coin"></i> My Shift</a>
+        <a class="nav-link {% if url_name == 'expense_list' %}active{% endif %}" href="{% url 'registers:expense_list' %}"><i class="bi bi-wallet2"></i> Expenses</a>
+
         <div class="nav-section">Stock</div>
         <a class="nav-link {% if ns == 'inventory' and url_name == 'product_list' %}active{% endif %}" href="{% url 'inventory:product_list' %}"><i class="bi bi-box-seam"></i> Products</a>
         <a class="nav-link {% if url_name == 'stock_list' %}active{% endif %}" href="{% url 'inventory:stock_list' %}"><i class="bi bi-boxes"></i> Stock Levels</a>
