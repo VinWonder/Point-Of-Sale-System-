@@ -1,55 +1,63 @@
 {% extends "base.html" %}
+{% load pos_tags %}
 {% block title %}Customers{% endblock %}
+{% block page_title %}Customers{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="page-header">
     <h3>Customers</h3>
-    <a href="{% url 'customers:customer_create' %}" class="btn btn-primary">+ Add Customer</a>
+    <a href="{% url 'customers:customer_create' %}" class="btn btn-accent"><i class="bi bi-person-plus"></i> Add Customer</a>
 </div>
-<table class="table table-striped">
-    <thead><tr><th>Name</th><th>Phone</th><th>Credit Limit</th><th>Balance Owed</th><th>Status</th><th></th></tr></thead>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="card stat-card"><div class="stat-label">Total owed by customers</div><div class="stat-value money text-danger">{{ totals.owed|money }}</div></div></div>
+    <div class="col-md-6"><div class="card stat-card"><div class="stat-label">Blocked (over limit)</div><div class="stat-value">{{ totals.blocked }}</div></div></div>
+</div>
+
+<form class="filter-bar row g-2 align-items-center" method="get">
+    <div class="col-md-5"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Name, phone or KRA PIN"></div>
+    <div class="col-md-3">
+        <select name="status" class="form-select" onchange="this.form.submit()">
+            <option value="">All customers</option>
+            <option value="owing" {% if status == 'owing' %}selected{% endif %}>Owing money</option>
+            <option value="blocked" {% if status == 'blocked' %}selected{% endif %}>Blocked (over limit)</option>
+            <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="type" class="form-select" onchange="this.form.submit()">
+            <option value="">All types</option>
+            {% for v, l in types %}<option value="{{ v }}" {% if ctype == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2 d-grid"><button class="btn btn-dark">Filter</button></div>
+</form>
+
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Customer</th><th>Phone</th><th class="text-end">Credit limit</th><th class="text-end">Owes</th><th class="text-end">Available</th><th>Status</th><th></th></tr></thead>
     <tbody>
-        {% for c in customers %}
-        <tr>
-            <td>{{ c.name }}</td>
-            <td>{{ c.phone_number }}</td>
-            <td>KES {{ c.credit_limit }}</td>
-            <td>KES {{ c.balance_owed }}</td>
+        {% for c in page_obj %}
+        <tr class="{% if not c.is_active %}text-muted{% endif %}">
+            <td><a href="{% url 'customers:customer_detail' c.id %}" class="fw-semibold text-decoration-none">{{ c.name }}</a><div class="small text-muted">{{ c.get_customer_type_display }}</div></td>
+            <td class="small">{{ c.phone_number }}</td>
+            <td class="text-end money">{{ c.credit_limit|money }}</td>
+            <td class="text-end money {% if c.balance_owed > 0 %}fw-semibold text-danger{% endif %}">{{ c.balance_owed|money }}</td>
+            <td class="text-end money">{{ c.available_credit|money }}</td>
             <td>
-                {% if c.is_defaulter %}<span class="badge bg-danger">Defaulter — blocked</span>
-                {% else %}<span class="badge bg-success">OK</span>{% endif %}
+                {% if c.is_defaulter %}<span class="badge bg-danger">Blocked</span>
+                {% elif c.balance_owed > 0 %}<span class="badge bg-warning text-dark">Owing</span>
+                {% else %}<span class="badge bg-success">Clear</span>{% endif %}
             </td>
-            <td>
-                <a href="{% url 'customers:customer_edit' c.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
-                <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#payModal{{ c.id }}">Record Payment</button>
+            <td class="text-end text-nowrap">
+                <a href="{% url 'customers:customer_detail' c.id %}" class="btn btn-sm btn-outline-secondary">Statement</a>
+                {% if c.balance_owed > 0 %}<a href="{% url 'customers:customer_detail' c.id %}#pay" class="btn btn-sm btn-outline-success">Receive payment</a>{% endif %}
             </td>
         </tr>
-
-        <div class="modal fade" id="payModal{{ c.id }}" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form method="post" action="{% url 'customers:record_payment' c.id %}">
-                        {% csrf_token %}
-                        <div class="modal-header"><h5 class="modal-title">Record payment — {{ c.name }}</h5></div>
-                        <div class="modal-body">
-                            <label class="form-label">Amount received (KES)</label>
-                            <p class="text-muted small mb-2">Currently owes KES {{ c.balance_owed }}</p>
-                            <input type="number" step="0.01" min="0.01" max="{{ c.balance_owed|stringformat:'s' }}" name="amount" class="form-control mb-2" required>
-                            <label class="form-label">Method</label>
-                            <select name="method" class="form-select mb-2">
-                                <option value="CASH">Cash</option><option value="MPESA">M-Pesa</option>
-                                <option value="BANK">Bank transfer</option><option value="CHEQUE">Cheque</option>
-                            </select>
-                            <label class="form-label">Reference (M-Pesa code / cheque no.)</label>
-                            <input type="text" name="reference" class="form-control" maxlength="100">
-                        </div>
-                        <div class="modal-footer">
-                            <button type="submit" class="btn btn-success">Save Payment</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No customers match.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% include "partials/pagination.html" %}
 {% endblock %}

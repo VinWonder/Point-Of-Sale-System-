@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}{{ customer.name }}{% endblock %}
+{% block page_title %}Customers / {{ customer.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h3>{{ customer.name }}
+            {% if customer.is_defaulter %}<span class="badge bg-danger align-middle fs-6">Blocked</span>{% endif %}
+            {% if not customer.is_active %}<span class="badge bg-secondary align-middle fs-6">Inactive</span>{% endif %}
+        </h3>
+        <div class="text-muted small">
+            {{ customer.get_customer_type_display }} · {{ customer.phone_number }}
+            {% if customer.email %} · {{ customer.email }}{% endif %}
+            {% if customer.kra_pin %} · PIN {{ customer.kra_pin }}{% endif %}
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <button onclick="window.print()" class="btn btn-outline-secondary d-print-none"><i class="bi bi-printer"></i> Print statement</button>
+        <a href="{% url 'customers:customer_edit' customer.id %}" class="btn btn-outline-secondary d-print-none"><i class="bi bi-pencil"></i> Edit</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Owes</div><div class="stat-value money {% if customer.balance_owed > 0 %}text-danger{% endif %}">{{ customer.balance_owed|money }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Credit limit</div><div class="stat-value money">{{ customer.credit_limit|money }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Available credit</div><div class="stat-value money">{{ customer.available_credit|money }}</div></div></div>
+    <div class="col-6 col-md-3"><div class="card stat-card"><div class="stat-label">Lifetime purchases</div><div class="stat-value money">{{ stats.spent|money }}</div><div class="small text-muted">{{ stats.count }} sales</div></div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">Account statement</div>
+            <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+                <thead><tr><th>Date</th><th>Description</th><th class="text-end">Charged</th><th class="text-end">Paid</th><th class="text-end">Balance</th></tr></thead>
+                <tbody>
+                {% for e in statement %}
+                <tr>
+                    <td class="small text-nowrap">{{ e.date|date:"d M Y H:i" }}</td>
+                    <td class="small">
+                        {% if e.kind == 'sale' %}<a href="{% url 'sales:receipt' e.obj.id %}">Credit sale {{ e.ref }}</a> · {{ e.obj.branch.name }}
+                        {% else %}Payment · {{ e.ref }}{% if e.obj.received_by %} <span class="text-muted">({{ e.obj.received_by.username }})</span>{% endif %}{% endif %}
+                    </td>
+                    <td class="text-end money">{% if e.debit %}{{ e.debit|money }}{% endif %}</td>
+                    <td class="text-end money text-success">{% if e.credit %}{{ e.credit|money }}{% endif %}</td>
+                    <td class="text-end money fw-semibold">{{ e.balance|money }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center text-muted py-3">No credit activity yet.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">Recent purchases</div>
+            <ul class="list-group list-group-flush">
+                {% for s in recent_sales %}
+                <a href="{% url 'sales:receipt' s.id %}" class="list-group-item list-group-item-action d-flex justify-content-between">
+                    <span>{{ s.receipt_number }} · {{ s.created_at|date:"d M Y" }} · {{ s.get_sale_type_display }}
+                        {% if s.is_voided %}<span class="badge bg-secondary">Voided</span>{% endif %}</span>
+                    <span class="money fw-semibold">{{ s.total|money }}</span>
+                </a>
+                {% empty %}
+                <li class="list-group-item text-muted">No purchases yet.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-lg-4 d-print-none">
+        <div class="card" id="pay">
+            <div class="card-header"><i class="bi bi-cash-coin"></i> Receive payment</div>
+            <div class="card-body">
+                {% if customer.balance_owed > 0 %}
+                <form method="post" action="{% url 'customers:record_payment' customer.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'customers:customer_detail' customer.id %}">
+                    <label class="form-label">Amount (owes {{ customer.balance_owed|money }})</label>
+                    <input type="number" step="0.01" min="0.01" max="{{ customer.balance_owed|stringformat:'s' }}" name="amount" class="form-control mb-2" required>
+                    <label class="form-label">Method</label>
+                    <select name="method" class="form-select mb-2">
+                        <option value="CASH">Cash</option><option value="MPESA">M-Pesa</option>
+                        <option value="BANK">Bank transfer</option><option value="CHEQUE">Cheque</option>
+                    </select>
+                    <label class="form-label">Reference</label>
+                    <input type="text" name="reference" class="form-control mb-3" maxlength="100" placeholder="M-Pesa code / cheque no.">
+                    <button class="btn btn-success w-100">Record payment</button>
+                </form>
+                {% else %}
+                <p class="text-muted mb-0"><i class="bi bi-check-circle text-success"></i> Nothing owed.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% if customer.notes or customer.address %}
+        <div class="card mt-3"><div class="card-body small">
+            {% if customer.address %}<div><i class="bi bi-geo-alt"></i> {{ customer.address }}</div>{% endif %}
+            {% if customer.notes %}<div class="mt-2">{{ customer.notes|linebreaksbr }}</div>{% endif %}
+        </div></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
