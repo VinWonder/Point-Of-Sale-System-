@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Q, Sum, Value
+from django.db.models import DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, redirect, get_object_or_404
 
@@ -95,11 +95,39 @@ def product_edit(request, product_id):
 
 @login_required
 def stock_list(request):
-    """Stock levels across all branches (or filtered to the user's own branch)."""
-    stocks = Stock.objects.select_related('product', 'branch').order_by('branch__name', 'product__name')
+    """Stock levels across branches, with value at cost and retail."""
+    from branches.models import Branch
+
+    stocks = Stock.objects.select_related('product', 'product__category', 'branch').filter(
+        product__is_active=True,
+    ).annotate(
+        cost_value=F('quantity') * F('product__cost_price'),
+        retail_value=F('quantity') * F('product__sell_price'),
+    )
+    branch = request.GET.get('branch', '')
     if request.user.role == User.Role.CASHIER and request.user.branch_id:
-        stocks = stocks.filter(branch=request.user.branch)
-    return render(request, 'inventory/stock_list.html', {'stocks': stocks})
+        branch = str(request.user.branch_id)
+    if branch.isdigit():
+        stocks = stocks.filter(branch_id=branch)
+    q = request.GET.get('q', '').strip()
+    if q:
+        stocks = stocks.filter(Q(product__name__icontains=q) | Q(product__sku__icontains=q))
+    level = request.GET.get('level', '')
+    if level == 'low':
+        stocks = stocks.filter(quantity__lte=F('product__reorder_level'), quantity__gt=0)
+    elif level == 'out':
+        stocks = stocks.filter(quantity__lte=0)
+
+    totals = stocks.aggregate(
+        cost=Coalesce(Sum('cost_value'), Value(0, output_field=DecimalField())),
+        retail=Coalesce(Sum('retail_value'), Value(0, output_field=DecimalField())),
+        units=Coalesce(Sum('quantity'), Value(0)),
+    )
+    return render(request, 'inventory/stock_list.html', {
+        'page_obj': paginate(request, stocks.order_by('branch__name', 'product__name'), per_page=50),
+        'branches': Branch.objects.filter(is_active=True).order_by('name'),
+        'current_branch': branch, 'q': q, 'level': level, 'totals': totals,
+    })
 
 
 @role_required(User.Role.OWNER, User.Role.MANAGER)

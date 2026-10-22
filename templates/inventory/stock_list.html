@@ -1,18 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Stock by Branch{% endblock %}
+{% load pos_tags %}
+{% block title %}Stock Levels{% endblock %}
+{% block page_title %}Stock Levels{% endblock %}
 {% block content %}
-<h3>Stock Levels by Branch</h3>
-<table class="table table-striped">
-    <thead><tr><th>Product</th><th>Branch</th><th>Quantity</th><th>Status</th></tr></thead>
+<div class="page-header">
+    <h3>Stock Levels</h3>
+    {% if user.role != 'CASHIER' %}
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'inventory:stock_adjust' %}" class="btn btn-outline-dark"><i class="bi bi-sliders"></i> Adjust</a>
+        <a href="{% url 'branches:transfer_create' %}" class="btn btn-outline-dark"><i class="bi bi-truck"></i> Transfer</a>
+        <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-accent"><i class="bi bi-bag-plus"></i> Receive Stock</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="card stat-card"><div class="stat-label">Units on hand</div><div class="stat-value">{{ totals.units|intcomma_plain }}</div></div></div>
+    {% if user.role != 'CASHIER' %}
+    <div class="col-md-4"><div class="card stat-card"><div class="stat-label">Stock value (cost)</div><div class="stat-value money">{{ totals.cost|money }}</div></div></div>
+    {% endif %}
+    <div class="col-md-4"><div class="card stat-card"><div class="stat-label">Stock value (retail)</div><div class="stat-value money">{{ totals.retail|money }}</div></div></div>
+</div>
+
+<form class="filter-bar row g-2 align-items-center" method="get">
+    <div class="col-md-4"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Search product or SKU"></div>
+    {% if user.role != 'CASHIER' %}
+    <div class="col-md-3">
+        <select name="branch" class="form-select" onchange="this.form.submit()">
+            <option value="">All branches</option>
+            {% for b in branches %}<option value="{{ b.id }}" {% if current_branch == b.id|stringformat:'s' %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div class="col-md-3">
+        <select name="level" class="form-select" onchange="this.form.submit()">
+            <option value="">All levels</option>
+            <option value="low" {% if level == 'low' %}selected{% endif %}>Low stock</option>
+            <option value="out" {% if level == 'out' %}selected{% endif %}>Out of stock</option>
+        </select>
+    </div>
+    <div class="col-md-2 d-grid"><button class="btn btn-dark">Filter</button></div>
+</form>
+
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Product</th><th>Branch</th><th class="text-end">Quantity</th><th class="text-end">Reorder at</th>{% if user.role != 'CASHIER' %}<th class="text-end">Value (cost)</th>{% endif %}<th class="text-end">Value (retail)</th><th>Status</th></tr></thead>
     <tbody>
-        {% for s in stocks %}
+        {% for s in page_obj %}
         <tr>
-            <td>{{ s.product.name }}</td>
+            <td><a href="{% url 'inventory:product_detail' s.product.id %}" class="text-decoration-none fw-semibold">{{ s.product.name }}</a><div class="small text-muted">{{ s.product.sku }}</div></td>
             <td>{{ s.branch.name }}</td>
-            <td>{{ s.quantity }}</td>
-            <td>{% if s.is_low %}<span class="badge bg-danger">Low Stock</span>{% else %}<span class="badge bg-success">OK</span>{% endif %}</td>
+            <td class="text-end fw-semibold">{{ s.quantity }} <span class="text-muted small">{{ s.product.unit }}</span></td>
+            <td class="text-end text-muted">{{ s.product.reorder_level }}</td>
+            {% if user.role != 'CASHIER' %}<td class="text-end money">{{ s.cost_value|money }}</td>{% endif %}
+            <td class="text-end money">{{ s.retail_value|money }}</td>
+            <td>
+                {% if s.quantity <= 0 %}<span class="badge bg-dark">Out of stock</span>
+                {% elif s.is_low %}<span class="badge bg-danger">Low</span>
+                {% else %}<span class="badge bg-success">OK</span>{% endif %}
+            </td>
         </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">No stock records match.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% include "partials/pagination.html" %}
 {% endblock %}
