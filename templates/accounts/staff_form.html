@@ -1,13 +1,21 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
 {% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="col-md-6">
-    <h3>{{ title }}</h3>
-    <form method="post">
-        {% csrf_token %}
-        {{ form|crispy }}
-        <button type="submit" class="btn btn-primary mt-2">Save</button>
-    </form>
+<div class="row">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">{{ title }}</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    <button type="submit" class="btn btn-accent">Save</button>
+                    <a href="{% if user.role == 'CASHIER' %}{% url 'dashboard:index' %}{% else %}{% url 'accounts:staff_list' %}{% endif %}" class="btn btn-link">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
