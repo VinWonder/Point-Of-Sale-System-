@@ -8,7 +8,8 @@ from accounts.models import User
 from branches.models import Branch
 from core.exports import csv_response
 from core.filters import PRESETS, date_range_from_request, filter_by_date
-from registers.models import Expense
+from registers.models import Expense, Shift
+from sales.models import Sale
 from . import metrics
 from .views import scoped_branch
 
@@ -29,6 +30,8 @@ REPORTS = [
      'text': 'Revenue, refunds, cost of goods, gross profit, expenses and net profit for any period.'},
     {'url': 'reports:product_sales', 'icon': 'bi-box-seam', 'title': 'Product sales',
      'text': 'Units, revenue and profit per product and category. Find best sellers and slow movers.'},
+    {'url': 'reports:staff_performance', 'icon': 'bi-person-badge', 'title': 'Staff performance',
+     'text': 'Sales, value, discounts given and voids per cashier, plus cash-up variances.'},
 ]
 
 
@@ -90,3 +93,35 @@ def product_sales(request):
     )
     ctx.update({'rows': rows, 'order': order, 'by_category': by_category})
     return render(request, 'reports/product_sales.html', ctx)
+
+
+@role_required(*MANAGERS)
+def staff_performance(request):
+    """Who sold what, who discounted and voided, and whose till came up short."""
+    from django.db.models import Count
+
+    ctx = report_context(request)
+    start, end, branch = ctx['start'], ctx['end'], ctx['branch']
+    rows = {r['served_by__username']: dict(r, voids=0, variance=Decimal('0.00'), shifts=0)
+            for r in metrics.staff_performance(start, end, branch)}
+
+    voided = filter_by_date(Sale.objects.filter(status=Sale.Status.VOIDED), start, end)
+    shifts = filter_by_date(Shift.objects.filter(status=Shift.Status.CLOSED), start, end, field='opened_at')
+    if branch:
+        voided = voided.filter(branch=branch)
+        shifts = shifts.filter(branch=branch)
+    for r in voided.values('served_by__username').annotate(n=Count('id')):
+        rows.setdefault(r['served_by__username'], {'served_by__username': r['served_by__username'],
+                                                   'revenue': 0, 'count': 0, 'discounts': 0,
+                                                   'variance': Decimal('0.00'), 'shifts': 0})['voids'] = r['n']
+    for shift in shifts.select_related('cashier'):
+        row = rows.setdefault(shift.cashier.username, {'served_by__username': shift.cashier.username,
+                                                       'revenue': 0, 'count': 0, 'discounts': 0, 'voids': 0,
+                                                       'variance': Decimal('0.00'), 'shifts': 0})
+        row['variance'] += shift.variance or 0
+        row['shifts'] += 1
+
+    for r in rows.values():
+        r['average'] = (r['revenue'] / r['count']).quantize(Decimal('0.01')) if r['count'] else None
+    ctx['rows'] = sorted(rows.values(), key=lambda r: r['revenue'] or 0, reverse=True)
+    return render(request, 'reports/staff_performance.html', ctx)

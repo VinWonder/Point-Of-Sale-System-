@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Staff Performance{% endblock %}
+{% block page_title %}Reports / Staff Performance{% endblock %}
+{% block content %}
+<div class="page-header"><h3>Staff Performance</h3></div>
+{% include "reports/_filters.html" %}
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Staff</th><th class="text-end">Sales</th><th class="text-end">Value</th><th class="text-end">Avg sale</th><th class="text-end">Discounts given</th><th class="text-end">Voids</th><th class="text-end">Shifts</th><th class="text-end">Cash-up variance</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+        <td class="fw-semibold">{{ r.served_by__username|default:"(deleted user)" }}</td>
+        <td class="text-end">{{ r.count }}</td>
+        <td class="text-end money">{{ r.revenue|money }}</td>
+        <td class="text-end money">{% if r.average %}{{ r.average|money }}{% else %}—{% endif %}</td>
+        <td class="text-end money">{{ r.discounts|money }}</td>
+        <td class="text-end">{% if r.voids %}<span class="badge bg-warning text-dark">{{ r.voids }}</span>{% else %}0{% endif %}</td>
+        <td class="text-end">{{ r.shifts }}</td>
+        <td class="text-end money fw-semibold {% if r.variance < 0 %}text-danger{% elif r.variance > 0 %}text-warning{% endif %}">{{ r.variance|money }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No sales in this period.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="small text-muted mt-2">Variance is the total of counted minus expected cash over closed shifts. A pattern of shortages or frequent voids is worth a conversation.</p>
+{% endblock %}
