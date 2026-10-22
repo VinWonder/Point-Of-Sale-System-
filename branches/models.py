@@ -29,6 +29,10 @@ class StockTransfer(models.Model):
     requested_by = models.ForeignKey(
         "accounts.User", on_delete=models.SET_NULL, null=True, related_name="transfers_requested"
     )
+    received_by = models.ForeignKey(
+        "accounts.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="transfers_received"
+    )
+    note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     received_at = models.DateTimeField(null=True, blank=True)
 

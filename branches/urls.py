@@ -10,4 +10,5 @@ urlpatterns = [
     path('transfers/', views.transfer_list, name='transfer_list'),
     path('transfers/create/', views.transfer_create, name='transfer_create'),
     path('transfers/<int:transfer_id>/receive/', views.transfer_receive, name='transfer_receive'),
+    path('transfers/<int:transfer_id>/cancel/', views.transfer_cancel, name='transfer_cancel'),
 ]

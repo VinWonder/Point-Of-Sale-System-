@@ -3,21 +3,41 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3>Stock Transfers</h3>
+    {% if user.role == 'OWNER' or user.role == 'MANAGER' %}
     <a href="{% url 'branches:transfer_create' %}" class="btn btn-primary">+ New Transfer</a>
+    {% endif %}
 </div>
-<table class="table table-striped">
-    <thead><tr><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Status</th><th></th></tr></thead>
+<div class="mb-3">
+    <a href="?" class="btn btn-sm {% if not current_status %}btn-dark{% else %}btn-outline-dark{% endif %}">All</a>
+    {% for value, label in statuses %}
+    <a href="?status={{ value }}" class="btn btn-sm {% if current_status == value %}btn-dark{% else %}btn-outline-dark{% endif %}">{{ label }}</a>
+    {% endfor %}
+</div>
+<table class="table table-striped align-middle">
+    <thead><tr><th>#</th><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Status</th><th>Dispatched</th><th>Received</th><th></th></tr></thead>
     <tbody>
         {% for t in transfers %}
         <tr>
-            <td>{{ t.product.name }}</td><td>{{ t.from_branch }}</td><td>{{ t.to_branch }}</td><td>{{ t.quantity }}</td>
-            <td><span class="badge bg-secondary">{{ t.status }}</span></td>
-            <td>
-                {% if t.status == 'IN_TRANSIT' %}
-                <a href="{% url 'branches:transfer_receive' t.id %}" class="btn btn-sm btn-success">Mark Received</a>
+            <td>{{ t.id }}</td>
+            <td>{{ t.product.name }}{% if t.note %}<div class="small text-muted">{{ t.note }}</div>{% endif %}</td>
+            <td>{{ t.from_branch }}</td><td>{{ t.to_branch }}</td><td>{{ t.quantity }}</td>
+            <td><span class="badge bg-{% if t.status == 'RECEIVED' %}success{% elif t.status == 'IN_TRANSIT' %}info{% elif t.status == 'CANCELLED' %}secondary{% else %}warning{% endif %}">{{ t.get_status_display }}</span></td>
+            <td class="small">{{ t.created_at|date:"d M Y H:i" }}<br><span class="text-muted">{{ t.requested_by.username|default:"" }}</span></td>
+            <td class="small">{% if t.received_at %}{{ t.received_at|date:"d M Y H:i" }}<br><span class="text-muted">{{ t.received_by.username|default:"" }}</span>{% endif %}</td>
+            <td class="text-nowrap">
+                {% if t.status == 'IN_TRANSIT' and user.role != 'CASHIER' %}
+                <form method="post" action="{% url 'branches:transfer_receive' t.id %}" class="d-inline">
+                    {% csrf_token %}<button class="btn btn-sm btn-success">Mark Received</button>
+                </form>
+                <form method="post" action="{% url 'branches:transfer_cancel' t.id %}" class="d-inline"
+                      onsubmit="return confirm('Cancel this transfer and return the stock to the sending branch?');">
+                    {% csrf_token %}<button class="btn btn-sm btn-outline-danger">Cancel</button>
+                </form>
                 {% endif %}
             </td>
         </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-muted text-center">No transfers yet.</td></tr>
         {% endfor %}
     </tbody>
 </table>
