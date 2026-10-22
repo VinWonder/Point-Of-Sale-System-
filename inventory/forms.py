@@ -36,3 +36,45 @@ class SupplierPurchaseForm(forms.ModelForm):
         if quantity <= 0:
             raise forms.ValidationError('Quantity must be at least 1.')
         return quantity
+
+
+class StockAdjustmentForm(forms.Form):
+    """Correct stock for damage, theft, or after a physical count."""
+
+    MODE_SET = 'set'
+    MODE_CHANGE = 'change'
+    REASONS = [
+        ('Stock count correction', 'Stock count correction'),
+        ('Damaged', 'Damaged / broken'),
+        ('Lost or stolen', 'Lost or stolen'),
+        ('Expired', 'Expired (cement, paint, adhesives)'),
+        ('Found stock', 'Found stock'),
+        ('Own use', 'Taken for shop use'),
+        ('Other', 'Other'),
+    ]
+
+    product = forms.ModelChoiceField(queryset=Product.objects.filter(is_active=True))
+    branch = forms.ModelChoiceField(queryset=None)
+    mode = forms.ChoiceField(
+        choices=[(MODE_SET, 'Set to counted quantity'), (MODE_CHANGE, 'Add / remove quantity')],
+        widget=forms.RadioSelect, initial=MODE_SET,
+    )
+    quantity = forms.IntegerField(help_text='Counted quantity, or the change (use a minus sign to remove).')
+    reason = forms.ChoiceField(choices=REASONS)
+    note = forms.CharField(max_length=200, required=False)
+
+    def __init__(self, *args, **kwargs):
+        from branches.models import Branch
+        super().__init__(*args, **kwargs)
+        self.fields['branch'].queryset = Branch.objects.filter(is_active=True)
+
+    def clean(self):
+        cleaned = super().clean()
+        mode, qty = cleaned.get('mode'), cleaned.get('quantity')
+        if qty is None:
+            return cleaned
+        if mode == self.MODE_SET and qty < 0:
+            self.add_error('quantity', 'A counted quantity cannot be negative.')
+        if mode == self.MODE_CHANGE and qty == 0:
+            self.add_error('quantity', 'Enter a non-zero change.')
+        return cleaned

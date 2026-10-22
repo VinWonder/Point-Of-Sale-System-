@@ -1,25 +1,76 @@
 {% extends "base.html" %}
-{% block title %}Inventory{% endblock %}
+{% load pos_tags %}
+{% block title %}Products{% endblock %}
+{% block page_title %}Products{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h3>Products</h3>
-    {% if user.role == 'OWNER' or user.role == 'MANAGER' %}
-    <div>
-        <a href="{% url 'inventory:product_create' %}" class="btn btn-primary">+ Add Product</a>
-        <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-outline-secondary">Restock from Supplier</a>
-        <a href="{% url 'inventory:stock_list' %}" class="btn btn-outline-secondary">View Stock by Branch</a>
+<div class="page-header">
+    <h3>Product Catalogue</h3>
+    {% if user.role != 'CASHIER' %}
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'inventory:product_create' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Add Product</a>
+        <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-outline-secondary"><i class="bi bi-bag-plus"></i> Receive Stock</a>
     </div>
     {% endif %}
 </div>
-<table class="table table-striped">
-    <thead><tr><th>Name</th><th>SKU</th><th>Cost</th><th>Sell Price</th><th>Reorder Level</th><th></th></tr></thead>
+
+<form class="filter-bar row g-2 align-items-center" method="get">
+    <div class="col-md-5">
+        <div class="input-group">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Name, SKU, barcode or brand">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select name="category" class="form-select" onchange="this.form.submit()">
+            <option value="">All categories</option>
+            {% for c in categories %}<option value="{{ c.id }}" {% if current_category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="show" class="form-select" onchange="this.form.submit()">
+            <option value="active" {% if show == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if show == 'inactive' %}selected{% endif %}>Discontinued</option>
+            <option value="all" {% if show == 'all' %}selected{% endif %}>All</option>
+        </select>
+    </div>
+    <div class="col-md-2 d-grid"><button class="btn btn-dark">Filter</button></div>
+</form>
+
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr>
+        <th>Product</th><th>SKU / Barcode</th><th>Category</th>
+        {% if user.role != 'CASHIER' %}<th class="text-end">Cost</th>{% endif %}
+        <th class="text-end">Retail</th><th class="text-end">Wholesale</th>
+        {% if user.role != 'CASHIER' %}<th class="text-end">Margin</th>{% endif %}
+        <th class="text-end">In stock</th><th></th>
+    </tr></thead>
     <tbody>
-        {% for p in products %}
-        <tr>
-            <td>{{ p.name }}</td><td>{{ p.sku }}</td><td>{{ p.cost_price }}</td><td>{{ p.sell_price }}</td><td>{{ p.reorder_level }}</td>
-            <td>{% if user.role == 'OWNER' or user.role == 'MANAGER' %}<a href="{% url 'inventory:product_edit' p.id %}" class="btn btn-sm btn-outline-primary">Edit</a>{% endif %}</td>
+        {% for p in page_obj %}
+        <tr class="{% if not p.is_active %}text-muted{% endif %}">
+            <td>
+                <a href="{% url 'inventory:product_detail' p.id %}" class="fw-semibold text-decoration-none">{{ p.name }}</a>
+                {% if p.brand %}<div class="small text-muted">{{ p.brand }}</div>{% endif %}
+            </td>
+            <td class="small"><code>{{ p.sku }}</code>{% if p.barcode %}<br><span class="text-muted">{{ p.barcode }}</span>{% endif %}</td>
+            <td class="small">{{ p.category|default:"—" }}</td>
+            {% if user.role != 'CASHIER' %}<td class="text-end money">{{ p.cost_price|money }}</td>{% endif %}
+            <td class="text-end money fw-semibold">{{ p.sell_price|money }}<div class="small text-muted">/ {{ p.unit }}</div></td>
+            <td class="text-end money small">{% if p.wholesale_price %}{{ p.wholesale_price|money }}<div class="text-muted">{{ p.wholesale_min_qty }}+ {{ p.unit }}</div>{% else %}—{% endif %}</td>
+            {% if user.role != 'CASHIER' %}<td class="text-end"><span class="badge text-bg-{% if p.margin_percent < 10 %}danger{% elif p.margin_percent < 20 %}warning{% else %}success{% endif %}">{{ p.margin_percent }}%</span></td>{% endif %}
+            <td class="text-end">
+                <span class="fw-semibold {% if p.total_stock <= p.reorder_level %}text-danger{% endif %}">{{ p.total_stock }}</span>
+                {% if p.total_stock <= p.reorder_level %}<i class="bi bi-exclamation-triangle-fill text-danger" title="At or below reorder level ({{ p.reorder_level }})"></i>{% endif %}
+            </td>
+            <td class="text-end text-nowrap">
+                {% if user.role != 'CASHIER' %}<a href="{% url 'inventory:product_edit' p.id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>{% endif %}
+            </td>
         </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-4">No products match your search.</td></tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+{% include "partials/pagination.html" %}
 {% endblock %}
