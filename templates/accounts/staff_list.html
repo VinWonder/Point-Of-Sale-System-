@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Staff{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Staff</h3>
+    <a href="{% url 'accounts:staff_create' %}" class="btn btn-primary">+ Add Staff</a>
+</div>
+<table class="table table-striped">
+    <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Branch</th><th>Active</th><th></th></tr></thead>
+    <tbody>
+        {% for s in staff %}
+        <tr>
+            <td>{{ s.username }}</td>
+            <td>{{ s.get_full_name }}</td>
+            <td><span class="badge bg-secondary">{{ s.role }}</span></td>
+            <td>{{ s.branch|default:"—" }}</td>
+            <td>{{ s.is_active|yesno:"Yes,No" }}</td>
+            <td><a href="{% url 'accounts:staff_edit' s.id %}" class="btn btn-sm btn-outline-primary">Edit</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

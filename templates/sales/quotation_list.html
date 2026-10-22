@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Quotations{% endblock %}
+{% block content %}
+<h3>Quotations</h3>
+<table class="table table-striped">
+    <thead><tr><th>#</th><th>Customer</th><th>Branch</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>
+    <tbody>
+        {% for q in quotations %}
+        <tr>
+            <td>{{ q.id }}</td>
+            <td>{{ q.customer|default:"Walk-in" }}</td>
+            <td>{{ q.branch }}</td>
+            <td>KES {{ q.total }}</td>
+            <td><span class="badge bg-secondary">{{ q.status }}</span></td>
+            <td>{{ q.created_at|date:"d M Y H:i" }}</td>
+            <td><a href="{% url 'sales:quotation' q.id %}" class="btn btn-sm btn-outline-primary">View</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

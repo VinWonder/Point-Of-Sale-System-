@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Stock by Branch{% endblock %}
+{% block content %}
+<h3>Stock Levels by Branch</h3>
+<table class="table table-striped">
+    <thead><tr><th>Product</th><th>Branch</th><th>Quantity</th><th>Status</th></tr></thead>
+    <tbody>
+        {% for s in stocks %}
+        <tr>
+            <td>{{ s.product.name }}</td>
+            <td>{{ s.branch.name }}</td>
+            <td>{{ s.quantity }}</td>
+            <td>{% if s.is_low %}<span class="badge bg-danger">Low Stock</span>{% else %}<span class="badge bg-success">OK</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

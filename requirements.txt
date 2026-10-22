@@ -1,0 +1,13 @@
+Django==5.1.*
+djangorestframework
+psycopg2-binary
+python-decouple
+django-crispy-forms
+crispy-bootstrap5
+django-daraja
+celery
+redis
+channels
+channels-redis
+whitenoise
+weasyprint

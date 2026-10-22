@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Hardware POS{% endblock %}
+{% block content %}
+<h3 class="mb-4">Dashboard</h3>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card text-bg-primary shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">Sales Today</h6>
+                <h2>{{ sales_today_count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-bg-success shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">Revenue Today</h6>
+                <h2>KES {{ total_today }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-bg-warning shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">Low Stock Items</h6>
+                <h2>{{ low_stock|length }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">Low Stock Alerts</div>
+            <ul class="list-group list-group-flush">
+                {% for stock in low_stock %}
+                <li class="list-group-item d-flex justify-content-between">
+                    {{ stock.product.name }} @ {{ stock.branch.name }}
+                    <span class="badge bg-danger">{{ stock.quantity }} left</span>
+                </li>
+                {% empty %}
+                <li class="list-group-item text-muted">No low stock items.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">Customer Defaulters</div>
+            <ul class="list-group list-group-flush">
+                {% for customer in defaulters %}
+                <li class="list-group-item d-flex justify-content-between">
+                    {{ customer.name }} ({{ customer.phone_number }})
+                    <span class="badge bg-danger">Owes KES {{ customer.balance_owed }}</span>
+                </li>
+                {% empty %}
+                <li class="list-group-item text-muted">No defaulters.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-1">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">Sales — Last 7 Days</div>
+            <div class="card-body"><canvas id="salesTrendChart" height="200"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header">Top Selling Products</div>
+            <div class="card-body"><canvas id="topProductsChart" height="200"></canvas></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+new Chart(document.getElementById('salesTrendChart'), {
+    type: 'line',
+    data: {
+        labels: {{ day_labels|safe }},
+        datasets: [{
+            label: 'Revenue (KES)',
+            data: {{ day_totals|safe }},
+            borderColor: '#0d6efd',
+            backgroundColor: 'rgba(13,110,253,0.15)',
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+});
+
+new Chart(document.getElementById('topProductsChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ product_labels|safe }},
+        datasets: [{
+            label: 'Units Sold',
+            data: {{ product_qtys|safe }},
+            backgroundColor: '#198754',
+        }]
+    },
+});
+</script>
+{% endblock %}

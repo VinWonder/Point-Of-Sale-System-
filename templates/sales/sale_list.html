@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Sales History{% endblock %}
+{% block content %}
+<h3>Recent Sales</h3>
+<table class="table table-striped">
+    <thead><tr><th>#</th><th>Customer</th><th>Branch</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>
+    <tbody>
+        {% for s in sales %}
+        <tr>
+            <td>{{ s.id }}</td>
+            <td>{{ s.customer|default:"Walk-in" }}</td>
+            <td>{{ s.branch }}</td>
+            <td>KES {{ s.total }}</td>
+            <td><span class="badge bg-{% if s.payment_status == 'PAID' %}success{% elif s.payment_status == 'PARTIAL' %}warning{% else %}danger{% endif %}">{{ s.payment_status }}</span></td>
+            <td>{{ s.created_at|date:"d M Y H:i" }}</td>
+            <td><a href="{% url 'sales:receipt' s.id %}" class="btn btn-sm btn-outline-primary">View Receipt</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

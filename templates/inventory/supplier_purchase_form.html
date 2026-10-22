@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Restock from Supplier{% endblock %}
+{% block content %}
+<div class="col-md-6">
+    <h3>Restock from Supplier</h3>
+    <p class="text-muted">Recording a purchase automatically increases stock at the selected branch.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form|crispy }}
+        <button type="submit" class="btn btn-primary mt-2">Save & Restock</button>
+    </form>
+</div>
+{% endblock %}

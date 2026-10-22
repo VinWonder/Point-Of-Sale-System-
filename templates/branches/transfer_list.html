@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Stock Transfers{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Stock Transfers</h3>
+    <a href="{% url 'branches:transfer_create' %}" class="btn btn-primary">+ New Transfer</a>
+</div>
+<table class="table table-striped">
+    <thead><tr><th>Product</th><th>From</th><th>To</th><th>Qty</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+        {% for t in transfers %}
+        <tr>
+            <td>{{ t.product.name }}</td><td>{{ t.from_branch }}</td><td>{{ t.to_branch }}</td><td>{{ t.quantity }}</td>
+            <td><span class="badge bg-secondary">{{ t.status }}</span></td>
+            <td>
+                {% if t.status == 'IN_TRANSIT' %}
+                <a href="{% url 'branches:transfer_receive' t.id %}" class="btn btn-sm btn-success">Mark Received</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

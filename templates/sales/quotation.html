@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Quotation #{{ quotation.id }}{% endblock %}
+{% block content %}
+<div class="card mx-auto" style="max-width: 500px;">
+    <div class="card-body">
+        <h5 class="text-center">Quotation #{{ quotation.id }}</h5>
+        <p class="text-center text-muted">{{ quotation.branch.name }} | {{ quotation.created_at|date:"d M Y" }}</p>
+        <p><strong>Customer:</strong> {{ quotation.customer|default:"Walk-in" }}</p>
+        <table class="table table-sm">
+            <thead><tr><th>Item</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
+            <tbody>
+                {% for item in quotation.items.all %}
+                <tr>
+                    <td>{{ item.product.name }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>KES {{ item.unit_price }}</td>
+                    <td>KES {{ item.subtotal }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h5 class="text-end">Total: KES {{ quotation.total }}</h5>
+        <p class="text-muted">This quotation is valid for 7 days.</p>
+        <div class="d-grid gap-2">
+            <button onclick="window.print()" class="btn btn-primary d-print-none">Print Quotation</button>
+            {% if quotation.status == 'DRAFT' %}
+            <form method="post" action="{% url 'sales:convert_quotation' quotation.id %}" class="d-print-none">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success w-100">Customer Accepted — Convert to Sale</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

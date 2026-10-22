@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}POS Checkout{% endblock %}
+{% block content %}
+<div x-data="posCart()" class="row g-3">
+
+    <!-- Product picker -->
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <input type="text" x-model="search" class="form-control"
+                       placeholder="Scan barcode or search product...">
+            </div>
+            <div class="card-body" style="max-height: 500px; overflow-y:auto;">
+                <table class="table table-hover">
+                    <thead><tr><th>Product</th><th>SKU</th><th>Price</th><th></th></tr></thead>
+                    <tbody>
+                        {% for p in products %}
+                        <tr x-show="matches('{{ p.name|escapejs }}', '{{ p.sku|escapejs }}')">
+                            <td>{{ p.name }}</td>
+                            <td>{{ p.sku }}</td>
+                            <td>KES {{ p.sell_price }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-primary"
+                                    @click="addItem({{ p.id }}, '{{ p.name|escapejs }}', {{ p.sell_price }})">
+                                    Add
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cart / checkout -->
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-header">Cart</div>
+            <div class="card-body">
+
+                <div class="mb-2">
+                    <label class="form-label">Customer (optional for cash, required for credit)</label>
+                    <select x-model="customerId" class="form-select">
+                        <option value="">Walk-in customer</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}" {% if c.is_defaulter %}data-defaulter="1"{% endif %}>
+                            {{ c.name }} {% if c.is_defaulter %}(OWES KES {{ c.balance_owed }} - BLOCKED){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <table class="table">
+                    <tbody>
+                        <template x-for="item in cart" :key="item.id">
+                            <tr>
+                                <td x-text="item.name"></td>
+                                <td>
+                                    <input type="number" min="1" x-model.number="item.qty" class="form-control form-control-sm" style="width:70px">
+                                </td>
+                                <td x-text="'KES ' + (item.qty * item.price)"></td>
+                                <td><button class="btn btn-sm btn-outline-danger" @click="removeItem(item.id)">x</button></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                <h5 class="text-end">Total: KES <span x-text="total()"></span></h5>
+
+                <div class="mb-2">
+                    <label class="form-label">Customer Phone (for M-Pesa)</label>
+                    <input type="text" x-model="phone" class="form-control" placeholder="2547XXXXXXXX">
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success" @click="checkout('CASH')" :disabled="loading">Complete Sale (Cash)</button>
+                    <button class="btn btn-primary" @click="checkout('MPESA')" :disabled="loading">Pay with M-Pesa (STK Push)</button>
+                    <button class="btn btn-warning" @click="checkout('CREDIT')" :disabled="loading">Sell on Credit (Account)</button>
+                    <button class="btn btn-outline-secondary" @click="saveQuotation()" :disabled="loading">Save as Quotation</button>
+                </div>
+
+                <div class="alert alert-danger mt-3" x-show="errorMessage" x-text="errorMessage"></div>
+                <div class="alert alert-info mt-3" x-show="statusMessage" x-text="statusMessage"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function posCart() {
+    return {
+        search: '',
+        cart: [],
+        phone: '',
+        customerId: '',
+        loading: false,
+        statusMessage: '',
+        errorMessage: '',
+
+        matches(name, sku) {
+            if (!this.search) return true;
+            const q = this.search.toLowerCase();
+            return name.toLowerCase().includes(q) || sku.toLowerCase().includes(q);
+        },
+        addItem(id, name, price) {
+            const existing = this.cart.find(i => i.id === id);
+            if (existing) { existing.qty += 1; }
+            else { this.cart.push({ id, name, price, qty: 1 }); }
+        },
+        removeItem(id) {
+            this.cart = this.cart.filter(i => i.id !== id);
+        },
+        total() {
+            return this.cart.reduce((sum, i) => sum + i.qty * i.price, 0);
+        },
+        getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        },
+        async saveQuotation() {
+            this.errorMessage = ''; this.statusMessage = '';
+            if (this.cart.length === 0) { this.errorMessage = 'Cart is empty.'; return; }
+            const res = await fetch("{% url 'sales:create_quotation' %}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': this.getCookie('csrftoken')},
+                body: JSON.stringify({
+                    customer_id: this.customerId || null,
+                    items: this.cart.map(i => ({ product_id: i.id, qty: i.qty })),
+                }),
+            });
+            const data = await res.json();
+            if (data.quotation_id) {
+                window.location.href = `/sales/quotation/${data.quotation_id}/`;
+            } else {
+                this.errorMessage = data.error || 'Could not save quotation.';
+            }
+        },
+        async checkout(method) {
+            this.errorMessage = ''; this.statusMessage = '';
+            if (this.cart.length === 0) { this.errorMessage = 'Cart is empty.'; return; }
+            if (method === 'CREDIT' && !this.customerId) {
+                this.errorMessage = 'Select a customer for a credit/account sale.'; return;
+            }
+            this.loading = true;
+
+            const res = await fetch("{% url 'sales:create_sale' %}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': this.getCookie('csrftoken')},
+                body: JSON.stringify({
+                    customer_id: this.customerId || null,
+                    items: this.cart.map(i => ({ product_id: i.id, qty: i.qty })),
+                    payment_method: method,
+                }),
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                this.errorMessage = data.error || 'Sale could not be completed.';
+                this.loading = false;
+                return;
+            }
+
+            if (method === 'MPESA') {
+                this.statusMessage = 'Sending STK push... ask the customer to check their phone.';
+                const mpesaRes = await fetch(`/payments/mpesa/initiate/${data.sale_id}/`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': this.getCookie('csrftoken')},
+                    body: `phone_number=${encodeURIComponent(this.phone)}`,
+                });
+                const mpesaData = await mpesaRes.json();
+                await this.pollPaymentStatus(mpesaData.payment_id, data.sale_id);
+            } else {
+                window.location.href = `/sales/receipt/${data.sale_id}/`;
+            }
+        },
+        async pollPaymentStatus(paymentId, saleId) {
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 3000));
+                const res = await fetch(`/payments/mpesa/status/${paymentId}/`);
+                const data = await res.json();
+                if (data.status === 'SUCCESS') {
+                    window.location.href = `/sales/receipt/${saleId}/`;
+                    return;
+                } else if (data.status === 'FAILED') {
+                    this.errorMessage = 'M-Pesa payment failed or was cancelled.';
+                    this.loading = false;
+                    return;
+                }
+            }
+            this.errorMessage = 'Payment confirmation timed out. Check payment status manually.';
+            this.loading = false;
+        },
+    }
+}
+</script>
+{% endblock %}
