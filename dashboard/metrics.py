@@ -93,12 +93,13 @@ def top_products(start, end, branch=None, limit=10, order='revenue'):
         (F('quantity') - F('returned_quantity')) * (F('unit_price') - F('cost_price')),
         output_field=DecimalField(max_digits=14, decimal_places=2),
     )
-    return list(
+    rows = (
         items.values('product_id', 'product__name', 'product__unit')
         .annotate(qty=Sum(F('quantity') - F('returned_quantity')), revenue=Sum(line_value), profit=Sum(line_profit))
         .filter(qty__gt=0)
-        .order_by(f'-{order}')[:limit]
+        .order_by(f'-{order}')
     )
+    return list(rows[:limit] if limit else rows)
 
 
 def branch_comparison(start, end):

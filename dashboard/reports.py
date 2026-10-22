@@ -1,11 +1,12 @@
 from decimal import Decimal
 
-from django.db.models import Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 from django.shortcuts import render
 
 from accounts.decorators import role_required
 from accounts.models import User
 from branches.models import Branch
+from core.exports import csv_response
 from core.filters import PRESETS, date_range_from_request, filter_by_date
 from registers.models import Expense
 from . import metrics
@@ -26,6 +27,8 @@ def report_context(request, default='month'):
 REPORTS = [
     {'url': 'reports:profit_and_loss', 'icon': 'bi-calculator', 'title': 'Profit & Loss',
      'text': 'Revenue, refunds, cost of goods, gross profit, expenses and net profit for any period.'},
+    {'url': 'reports:product_sales', 'icon': 'bi-box-seam', 'title': 'Product sales',
+     'text': 'Units, revenue and profit per product and category. Find best sellers and slow movers.'},
 ]
 
 
@@ -58,3 +61,32 @@ def profit_and_loss(request):
         'uncollected': totals['revenue'] - totals['collected'],
     })
     return render(request, 'reports/profit_and_loss.html', ctx)
+
+
+@role_required(*MANAGERS)
+def product_sales(request):
+    ctx = report_context(request)
+    start, end, branch = ctx['start'], ctx['end'], ctx['branch']
+    order = request.GET.get('order', 'revenue')
+    if order not in ('revenue', 'qty', 'profit'):
+        order = 'revenue'
+    rows = metrics.top_products(start, end, branch, limit=None, order=order)
+    for r in rows:
+        r['margin'] = round(float(r['profit'] / r['revenue'] * 100), 1) if r['revenue'] else 0.0
+
+    if request.GET.get('export') == 'csv':
+        return csv_response('product-sales', ['Product', 'Unit', 'Qty sold', 'Revenue', 'Gross profit', 'Margin %'], (
+            [r['product__name'], r['product__unit'], r['qty'], r['revenue'], r['profit'], r['margin']] for r in rows
+        ))
+
+    items = metrics.SaleItem.objects.filter(sale__in=metrics._between(metrics.live_sales(branch), start, end))
+    by_category = (
+        items.values('product__category__name')
+        .annotate(revenue=Sum(ExpressionWrapper(
+            (F('quantity') - F('returned_quantity')) * F('unit_price'),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )))
+        .order_by('-revenue')
+    )
+    ctx.update({'rows': rows, 'order': order, 'by_category': by_category})
+    return render(request, 'reports/product_sales.html', ctx)

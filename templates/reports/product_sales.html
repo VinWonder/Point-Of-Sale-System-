@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Product Sales{% endblock %}
+{% block page_title %}Reports / Product Sales{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Product Sales</h3>
+    <a href="?{% query_replace export='csv' %}" class="btn btn-outline-secondary d-print-none"><i class="bi bi-download"></i> Export CSV</a>
+</div>
+{% include "reports/_filters.html" %}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="table-card">
+        <table class="table table-hover align-middle">
+            <thead><tr>
+                <th>#</th><th>Product</th>
+                <th class="text-end"><a href="?{% query_replace order='qty' %}" class="text-reset {% if order == 'qty' %}fw-bold{% endif %}">Qty sold</a></th>
+                <th class="text-end"><a href="?{% query_replace order='revenue' %}" class="text-reset {% if order == 'revenue' %}fw-bold{% endif %}">Revenue</a></th>
+                <th class="text-end"><a href="?{% query_replace order='profit' %}" class="text-reset {% if order == 'profit' %}fw-bold{% endif %}">Gross profit</a></th>
+                <th class="text-end">Margin</th>
+            </tr></thead>
+            <tbody>
+            {% for r in rows %}
+            <tr>
+                <td class="text-muted">{{ forloop.counter }}</td>
+                <td><a href="{% url 'inventory:product_detail' r.product_id %}" class="text-decoration-none">{{ r.product__name }}</a></td>
+                <td class="text-end">{{ r.qty }} <span class="small text-muted">{{ r.product__unit }}</span></td>
+                <td class="text-end money">{{ r.revenue|money }}</td>
+                <td class="text-end money">{{ r.profit|money }}</td>
+                <td class="text-end"><span class="badge text-bg-{% if r.margin < 10 %}danger{% elif r.margin < 20 %}warning{% else %}success{% endif %}">{{ r.margin }}%</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Nothing sold in this period.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">Revenue by category</div>
+            <ul class="list-group list-group-flush">
+                {% for c in by_category %}
+                <li class="list-group-item d-flex justify-content-between"><span>{{ c.product__category__name|default:"Uncategorised" }}</span><span class="money">{{ c.revenue|money }}</span></li>
+                {% empty %}
+                <li class="list-group-item text-muted">No sales.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
