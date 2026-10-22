@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Suppliers{% endblock %}
+{% block page_title %}Stock / Suppliers{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Suppliers</h3>
+    <a href="{% url 'inventory:supplier_create' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> Add Supplier</a>
+</div>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Supplier</th><th>Contact</th><th>KRA PIN</th><th class="text-end">Deliveries</th><th class="text-end">Unpaid</th><th></th></tr></thead>
+    <tbody>
+    {% for s in suppliers %}
+    <tr class="{% if not s.is_active %}text-muted{% endif %}">
+        <td class="fw-semibold">{{ s.name }}{% if not s.is_active %} <span class="badge bg-secondary">Inactive</span>{% endif %}<div class="small text-muted">{{ s.address }}</div></td>
+        <td class="small">{{ s.contact_person }}<br>{{ s.phone_number }}{% if s.email %}<br>{{ s.email }}{% endif %}</td>
+        <td class="small">{{ s.kra_pin|default:"—" }}</td>
+        <td class="text-end">{{ s.purchase_count }}</td>
+        <td class="text-end money {% if s.unpaid > 0 %}text-danger fw-semibold{% endif %}">{{ s.unpaid|money }}</td>
+        <td class="text-end text-nowrap">
+            <a href="{% url 'inventory:purchase_list' %}?supplier={{ s.id }}" class="btn btn-sm btn-outline-secondary">Deliveries</a>
+            <a href="{% url 'inventory:supplier_edit' s.id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></a>
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="text-center text-muted py-4">No suppliers yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

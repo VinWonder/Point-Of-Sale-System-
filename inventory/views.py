@@ -1,16 +1,18 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import DecimalField, F, Q, Sum, Value
+from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from accounts.audit import log_action
 from accounts.decorators import role_required
 from accounts.models import User
-from .forms import ProductForm, StockAdjustmentForm, SupplierPurchaseForm
+from .forms import CategoryForm, ProductForm, StockAdjustmentForm, SupplierForm, SupplierPurchaseForm
 from core.utils import paginate
-from .models import Category, Product, Stock, StockMovement, SupplierPurchase
+from .models import Category, Product, Stock, StockMovement, Supplier, SupplierPurchase
 from .services import InsufficientStock, adjust_stock, available_quantity
 
 
@@ -153,7 +155,9 @@ def supplier_purchase_create(request):
             log_action(request.user, f'Restocked {purchase.quantity} x {purchase.product.name}', purchase)
 
             messages.success(request, f'Restocked {purchase.quantity} x {purchase.product.name} at {purchase.branch}.')
-            return redirect('inventory:stock_list')
+            if 'add_another' in request.POST:
+                return redirect('inventory:supplier_purchase_create')
+            return redirect('inventory:purchase_list')
     else:
         form = SupplierPurchaseForm()
     return render(request, 'inventory/supplier_purchase_form.html', {'form': form})
@@ -188,3 +192,70 @@ def stock_adjust(request):
                 messages.success(request, f'{product.name} at {branch.name}: {current} → {stock.quantity}.')
                 return redirect('inventory:product_detail', product_id=product.id)
     return render(request, 'inventory/stock_adjust.html', {'form': form})
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def category_list(request):
+    """List categories and add new ones inline."""
+    form = CategoryForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        category = form.save()
+        messages.success(request, f'Category "{category.name}" added.')
+        return redirect('inventory:category_list')
+    categories = Category.objects.annotate(product_count=Count('product')).order_by('name')
+    return render(request, 'inventory/category_list.html', {'categories': categories, 'form': form})
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def supplier_list(request):
+    suppliers = Supplier.objects.annotate(
+        purchase_count=Count('supplierpurchase'),
+        unpaid=Coalesce(
+            Sum(F('supplierpurchase__quantity') * F('supplierpurchase__cost_price'),
+                filter=Q(supplierpurchase__is_paid=False)),
+            Value(0, output_field=DecimalField()),
+        ),
+    ).order_by('name')
+    return render(request, 'inventory/supplier_list.html', {'suppliers': suppliers})
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def supplier_form(request, supplier_id=None):
+    supplier = get_object_or_404(Supplier, pk=supplier_id) if supplier_id else None
+    form = SupplierForm(request.POST or None, instance=supplier)
+    if request.method == 'POST' and form.is_valid():
+        supplier = form.save()
+        messages.success(request, f'Supplier {supplier.name} saved.')
+        return redirect('inventory:supplier_list')
+    return render(request, 'inventory/simple_form.html', {
+        'form': form, 'title': 'Edit Supplier' if supplier else 'Add Supplier',
+        'back_url': 'inventory:supplier_list',
+    })
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def purchase_list(request):
+    purchases = SupplierPurchase.objects.select_related('supplier', 'product', 'branch', 'created_by')
+    supplier = request.GET.get('supplier', '')
+    if supplier.isdigit():
+        purchases = purchases.filter(supplier_id=supplier)
+    if request.GET.get('unpaid'):
+        purchases = purchases.filter(is_paid=False)
+    return render(request, 'inventory/purchase_list.html', {
+        'page_obj': paginate(request, purchases),
+        'suppliers': Supplier.objects.order_by('name'),
+        'current_supplier': supplier,
+        'unpaid_only': bool(request.GET.get('unpaid')),
+    })
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+@require_POST
+def purchase_mark_paid(request, purchase_id):
+    purchase = get_object_or_404(SupplierPurchase, pk=purchase_id, is_paid=False)
+    purchase.is_paid = True
+    purchase.paid_at = timezone.now()
+    purchase.save(update_fields=['is_paid', 'paid_at'])
+    log_action(request.user, f'Marked purchase #{purchase.pk} as paid', purchase)
+    messages.success(request, f'Purchase #{purchase.pk} marked as paid.')
+    return redirect(request.POST.get('next') or 'inventory:purchase_list')

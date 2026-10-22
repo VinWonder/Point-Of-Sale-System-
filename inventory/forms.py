@@ -2,6 +2,18 @@ from django import forms
 from .models import Product, SupplierPurchase, Category, Supplier
 
 
+class CategoryForm(forms.ModelForm):
+    class Meta:
+        model = Category
+        fields = ('name',)
+
+
+class SupplierForm(forms.ModelForm):
+    class Meta:
+        model = Supplier
+        fields = ('name', 'contact_person', 'phone_number', 'email', 'kra_pin', 'address', 'is_active')
+
+
 class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
@@ -28,8 +40,13 @@ class ProductForm(forms.ModelForm):
 class SupplierPurchaseForm(forms.ModelForm):
     class Meta:
         model = SupplierPurchase
-        fields = ('supplier', 'product', 'branch', 'quantity', 'cost_price', 'is_paid')
-        labels = {'cost_price': 'Unit cost price'}
+        fields = ('supplier', 'invoice_number', 'product', 'branch', 'quantity', 'cost_price', 'is_paid')
+        labels = {'cost_price': 'Unit cost price', 'is_paid': 'Already paid to supplier'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['supplier'].queryset = Supplier.objects.filter(is_active=True)
+        self.fields['product'].queryset = Product.objects.filter(is_active=True)
 
     def clean_quantity(self):
         quantity = self.cleaned_data['quantity']

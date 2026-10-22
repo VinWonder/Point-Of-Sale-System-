@@ -102,12 +102,21 @@ class SupplierPurchase(models.Model):
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField()
     cost_price = models.DecimalField(max_digits=12, decimal_places=2)
+    invoice_number = models.CharField(max_length=50, blank=True, help_text="Supplier's invoice / delivery note")
     is_paid = models.BooleanField(default=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self):
         return f"{self.product} x{self.quantity} from {self.supplier}"
+
+    @property
+    def total_cost(self):
+        return self.quantity * self.cost_price
 
 
 class StockMovement(models.Model):

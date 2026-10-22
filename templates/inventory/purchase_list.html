@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Stock Deliveries{% endblock %}
+{% block page_title %}Stock / Deliveries{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Stock Deliveries</h3>
+    <a href="{% url 'inventory:supplier_purchase_create' %}" class="btn btn-accent"><i class="bi bi-bag-plus"></i> Receive Stock</a>
+</div>
+<form class="filter-bar row g-2 align-items-center" method="get">
+    <div class="col-md-5">
+        <select name="supplier" class="form-select" onchange="this.form.submit()">
+            <option value="">All suppliers</option>
+            {% for s in suppliers %}<option value="{{ s.id }}" {% if current_supplier == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="unpaid" value="1" id="unpaid" {% if unpaid_only %}checked{% endif %} onchange="this.form.submit()">
+            <label class="form-check-label" for="unpaid">Unpaid invoices only</label>
+        </div>
+    </div>
+</form>
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>#</th><th>Date</th><th>Supplier / Invoice</th><th>Product</th><th>Branch</th><th class="text-end">Qty</th><th class="text-end">Unit cost</th><th class="text-end">Total</th><th>Paid</th></tr></thead>
+    <tbody>
+    {% for p in page_obj %}
+    <tr>
+        <td>{{ p.id }}</td>
+        <td class="small text-nowrap">{{ p.created_at|date:"d M Y" }}<div class="text-muted">{{ p.created_by.username|default:"" }}</div></td>
+        <td>{{ p.supplier|default:"—" }}{% if p.invoice_number %}<div class="small text-muted">Inv {{ p.invoice_number }}</div>{% endif %}</td>
+        <td>{{ p.product.name }}</td>
+        <td class="small">{{ p.branch.name }}</td>
+        <td class="text-end">{{ p.quantity }}</td>
+        <td class="text-end money">{{ p.cost_price|money }}</td>
+        <td class="text-end money fw-semibold">{{ p.total_cost|money }}</td>
+        <td>
+            {% if p.is_paid %}<span class="badge bg-success">Paid</span>
+            {% else %}
+            <form method="post" action="{% url 'inventory:purchase_mark_paid' p.id %}" onsubmit="return confirm('Mark this delivery as paid?');">
+                {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="btn btn-sm btn-outline-danger">Unpaid · Mark paid</button>
+            </form>
+            {% endif %}
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="9" class="text-center text-muted py-4">No deliveries recorded.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}

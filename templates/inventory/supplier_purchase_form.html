@@ -1,14 +1,26 @@
 {% extends "base.html" %}
 {% load crispy_forms_tags %}
-{% block title %}Restock from Supplier{% endblock %}
+{% block title %}Receive Stock{% endblock %}
+{% block page_title %}Stock / Receive Delivery{% endblock %}
 {% block content %}
-<div class="col-md-6">
-    <h3>Restock from Supplier</h3>
-    <p class="text-muted">Recording a purchase automatically increases stock at the selected branch.</p>
-    <form method="post">
-        {% csrf_token %}
-        {{ form|crispy }}
-        <button type="submit" class="btn btn-primary mt-2">Save & Restock</button>
-    </form>
+<div class="row">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bag-plus"></i> Receive stock from supplier</div>
+            <div class="card-body">
+                <p class="text-muted small">Recording a delivery increases stock at the selected branch and updates the product's cost price.
+                    No supplier yet? <a href="{% url 'inventory:supplier_create' %}">Add one</a>.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="submit" class="btn btn-accent">Save &amp; Restock</button>
+                        <button type="submit" name="add_another" value="1" class="btn btn-outline-dark">Save &amp; add another item</button>
+                        <a href="{% url 'inventory:purchase_list' %}" class="btn btn-link">View deliveries</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

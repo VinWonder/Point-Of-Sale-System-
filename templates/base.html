@@ -36,7 +36,9 @@
         <a class="nav-link {% if url_name == 'stock_list' %}active{% endif %}" href="{% url 'inventory:stock_list' %}"><i class="bi bi-boxes"></i> Stock Levels</a>
         <a class="nav-link {% if 'transfer' in url_name %}active{% endif %}" href="{% url 'branches:transfer_list' %}"><i class="bi bi-truck"></i> Transfers</a>
         {% if user.role != 'CASHIER' %}
-        <a class="nav-link {% if url_name == 'supplier_purchase_create' %}active{% endif %}" href="{% url 'inventory:supplier_purchase_create' %}"><i class="bi bi-bag-plus"></i> Receive Stock</a>
+        <a class="nav-link {% if url_name == 'supplier_purchase_create' or url_name == 'purchase_list' %}active{% endif %}" href="{% url 'inventory:purchase_list' %}"><i class="bi bi-bag-plus"></i> Deliveries</a>
+        <a class="nav-link {% if 'supplier' in url_name and url_name != 'supplier_purchase_create' %}active{% endif %}" href="{% url 'inventory:supplier_list' %}"><i class="bi bi-building"></i> Suppliers</a>
+        <a class="nav-link {% if url_name == 'category_list' %}active{% endif %}" href="{% url 'inventory:category_list' %}"><i class="bi bi-tags"></i> Categories</a>
         {% endif %}
 
         {% if user.role != 'CASHIER' %}
