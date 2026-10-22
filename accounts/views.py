@@ -1,40 +1,81 @@
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordChangeForm
+from django.db.models import Count, Q
 from django.shortcuts import render, redirect, get_object_or_404
 
+from .audit import log_action
 from .decorators import role_required
-from .forms import StaffCreateForm, StaffEditForm
+from .forms import StaffCreateForm, StaffEditForm, StaffPasswordForm
 from .models import User
+
+
+def _manageable(actor):
+    """Staff the actor is allowed to manage."""
+    if actor.role == User.Role.OWNER:
+        return User.objects.all()
+    return User.objects.filter(branch_id=actor.branch_id, role=User.Role.CASHIER)
 
 
 @role_required(User.Role.OWNER, User.Role.MANAGER)
 def staff_list(request):
-    staff = User.objects.all().order_by('username')
-    return render(request, 'accounts/staff_list.html', {'staff': staff})
+    staff = User.objects.select_related('branch').annotate(
+        sales_count=Count('sale', filter=~Q(sale__status='VOIDED')),
+    ).order_by('-is_active', 'branch__name', 'username')
+    if request.user.role == User.Role.MANAGER:
+        staff = staff.filter(branch_id=request.user.branch_id)
+    manageable = set(_manageable(request.user).values_list('pk', flat=True))
+    return render(request, 'accounts/staff_list.html', {'staff': staff, 'manageable': manageable})
 
 
 @role_required(User.Role.OWNER, User.Role.MANAGER)
 def staff_create(request):
-    if request.method == 'POST':
-        form = StaffCreateForm(request.POST)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Staff member created.')
-            return redirect('accounts:staff_list')
-    else:
-        form = StaffCreateForm()
+    form = StaffCreateForm(request.POST or None, actor=request.user)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        log_action(request.user, f'Created {user.get_role_display()} account {user.username}', user)
+        messages.success(request, f'Staff member {user.username} created.')
+        return redirect('accounts:staff_list')
     return render(request, 'accounts/staff_form.html', {'form': form, 'title': 'Add Staff'})
 
 
 @role_required(User.Role.OWNER, User.Role.MANAGER)
 def staff_edit(request, user_id):
-    staff_member = get_object_or_404(User, pk=user_id)
-    if request.method == 'POST':
-        form = StaffEditForm(request.POST, instance=staff_member)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Staff member updated.')
-            return redirect('accounts:staff_list')
-    else:
-        form = StaffEditForm(instance=staff_member)
-    return render(request, 'accounts/staff_form.html', {'form': form, 'title': 'Edit Staff'})
+    staff_member = get_object_or_404(_manageable(request.user), pk=user_id)
+    form = StaffEditForm(request.POST or None, instance=staff_member, actor=request.user)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        log_action(request.user, f'Updated staff {staff_member.username}', staff_member,
+                   ', '.join(form.changed_data))
+        messages.success(request, 'Staff member updated.')
+        return redirect('accounts:staff_list')
+    return render(request, 'accounts/staff_form.html', {
+        'form': form, 'title': f'Edit {staff_member.username}', 'staff_member': staff_member,
+    })
+
+
+@role_required(User.Role.OWNER, User.Role.MANAGER)
+def staff_set_password(request, user_id):
+    staff_member = get_object_or_404(_manageable(request.user), pk=user_id)
+    form = StaffPasswordForm(staff_member, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        log_action(request.user, f'Reset password for {staff_member.username}', staff_member)
+        messages.success(request, f'New password set for {staff_member.username}.')
+        return redirect('accounts:staff_list')
+    return render(request, 'accounts/staff_form.html', {
+        'form': form, 'title': f'Set password for {staff_member.username}',
+    })
+
+
+@login_required
+def change_password(request):
+    form = PasswordChangeForm(request.user, request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        log_action(user, 'Changed own password', user)
+        messages.success(request, 'Your password has been changed.')
+        return redirect('dashboard:index')
+    return render(request, 'accounts/staff_form.html', {'form': form, 'title': 'Change my password'})
