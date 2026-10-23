@@ -350,3 +350,69 @@ class QuotationNumberingTests(SaleTestMixin, TestCase):
         self.client.force_login(self.cashier)
         res = self.client.get(reverse('sales:quotation_list'), {'q': q.reference, 'status': 'all'})
         self.assertEqual(list(res.context['page_obj']), [q])
+
+
+class SaveQuotationTests(SaleTestMixin, TestCase):
+    def save(self, user=None, items=None, **kw):
+        from .quotations import save_quotation
+        items = items if items is not None else [{'product_id': self.cement.pk, 'qty': 2}]
+        return save_quotation(user=user or self.cashier, raw_items=items, **kw)
+
+    def test_list_price_and_wholesale_default(self):
+        q = self.save(items=[{'product_id': self.cement.pk, 'qty': 12}])
+        self.assertEqual(q.items.get().unit_price, Decimal('750.00'))
+        self.assertEqual(q.reference, 'QT-0001')
+
+    def test_cashier_can_negotiate_within_cap(self):
+        q = self.save(items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '760'}])   # 5% off 800
+        self.assertEqual(q.total, Decimal('760.00'))
+
+    def test_cashier_cannot_go_below_cap(self):
+        with self.assertRaises(SaleError):
+            self.save(items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '700'}])
+
+    def test_manager_floor_is_cost(self):
+        self.save(user=self.manager, items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '650'}])
+        with self.assertRaises(SaleError):
+            self.save(user=self.manager, items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '600'}])
+
+    def test_owner_can_price_below_cost(self):
+        owner = User.objects.create_user(username='boss', password='x-123456!', role=User.Role.OWNER,
+                                         branch=self.branch)
+        q = self.save(user=owner, items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '500'}])
+        self.assertEqual(q.total, Decimal('500.00'))
+
+    def test_bad_prices_and_validity(self):
+        for kw in ({'items': [{'product_id': self.cement.pk, 'qty': 1, 'unit_price': 'abc'}]},
+                   {'items': [{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '0'}]},
+                   {'items': []}, {'valid_days': 0}, {'valid_days': 400}):
+            with self.subTest(kw=kw), self.assertRaises(SaleError):
+                self.save(**kw)
+
+    def test_walk_in_name_ignored_when_customer_registered(self):
+        customer = Customer.objects.create(name='Fundi', phone_number='254711', credit_limit=1000)
+        q = self.save(customer=customer, customer_name='Someone else')
+        self.assertEqual(q.customer_name, '')
+        self.assertEqual(q.client_name, 'Fundi')
+
+    def test_edit_keeps_number(self):
+        q = self.save()
+        edited = self.save(quotation=q, items=[{'product_id': self.nails.pk, 'qty': 4}], valid_days=7)
+        self.assertEqual(edited.number, q.number)
+        self.assertEqual(edited.items.get().product, self.nails)
+        self.assertEqual(Quotation.objects.count(), 1)
+
+    def test_cannot_edit_converted(self):
+        q = self.save()
+        q.status = Quotation.Status.CONVERTED
+        q.save()
+        with self.assertRaises(SaleError):
+            self.save(quotation=q)
+
+    def test_endpoint_returns_reference(self):
+        self.client.force_login(self.cashier)
+        res = self.client.post(reverse('sales:create_quotation'), json.dumps({
+            'items': [{'product_id': self.nails.pk, 'qty': 2}], 'customer_name': 'Mama Wanjiku',
+        }), content_type='application/json')
+        self.assertEqual(res.json()['reference'], 'QT-0001')
+        self.assertEqual(Quotation.objects.get().client_name, 'Mama Wanjiku')

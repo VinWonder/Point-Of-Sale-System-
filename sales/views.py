@@ -1,5 +1,4 @@
 import json
-from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -23,7 +22,8 @@ from customers.models import Customer
 from inventory.models import Category, Product, Stock
 from payments.mpesa import simulation_enabled
 from registers.services import current_shift
-from .models import Sale, SaleReturn, Quotation, QuotationItem
+from .models import Sale, SaleReturn, Quotation
+from .quotations import save_quotation
 from .services import SaleError, checkout, parse_lines, process_return, void_sale
 
 
@@ -117,32 +117,23 @@ def create_sale(request):
 @login_required
 @require_POST
 def create_quotation(request):
-    """Creates a printable Quotation (no stock deduction — nothing has been sold yet)."""
+    """Save a quotation from the POS cart or the Quotation Desk (no stock moves yet)."""
     try:
         data = _json_body(request)
-        if not request.user.branch_id:
-            raise SaleError('Your account is not assigned to a branch. Contact your manager.')
-        lines = parse_lines(data.get('items', []))
+        customer = None
+        if data.get('customer_id'):
+            customer = get_object_or_404(Customer, pk=data['customer_id'])
+        quotation = None
+        if data.get('quotation_id'):
+            quotation = get_object_or_404(Quotation, pk=data['quotation_id'])
+        quotation = save_quotation(
+            user=request.user, raw_items=data.get('items', []), customer=customer,
+            customer_name=data.get('customer_name', ''), customer_phone=data.get('customer_phone', ''),
+            valid_days=data.get('valid_days'), notes=data.get('notes', ''), quotation=quotation,
+        )
     except SaleError as exc:
         return JsonResponse({'error': str(exc)}, status=exc.status)
-
-    customer_id = data.get('customer_id')
-    customer = get_object_or_404(Customer, pk=customer_id) if customer_id else None
-    validity = ShopSettings.load().quotation_validity_days
-
-    with transaction.atomic():
-        quotation = Quotation.objects.create(
-            customer=customer, branch=request.user.branch, created_by=request.user,
-            valid_until=timezone.localdate() + timedelta(days=validity),
-            notes=str(data.get('notes', ''))[:255],
-        )
-        for product, qty in lines.items():
-            QuotationItem.objects.create(
-                quotation=quotation, product=product, quantity=qty,
-                unit_price=product.price_for_quantity(qty),
-            )
-    log_action(request.user, f'Created quotation {quotation.reference}', quotation)
-    return JsonResponse({'quotation_id': quotation.id})
+    return JsonResponse({'quotation_id': quotation.id, 'reference': quotation.reference})
 
 
 @login_required
