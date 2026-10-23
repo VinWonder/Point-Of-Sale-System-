@@ -34,3 +34,13 @@ def query_replace(context, **kwargs):
         else:
             query[key] = value
     return query.urlencode()
+
+
+@register.filter
+def in_words(value):
+    """12550 -> 'Kenya Shillings Twelve Thousand Five Hundred and Fifty Only'."""
+    from core.words import amount_in_words
+    try:
+        return amount_in_words(value)
+    except (InvalidOperation, TypeError, ValueError):
+        return ''

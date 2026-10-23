@@ -135,3 +135,16 @@ class LogoUploadTests(TestCase):
     def test_logo_shown_in_layout(self):
         self.post(self.png())
         self.assertContains(self.client.get(reverse('dashboard:index')), 'data:image/png;base64,')
+
+
+class AmountInWordsTests(TestCase):
+    def test_examples(self):
+        from .words import amount_in_words
+        self.assertEqual(amount_in_words(0), 'Kenya Shillings Zero Only')
+        self.assertEqual(amount_in_words(15), 'Kenya Shillings Fifteen Only')
+        self.assertEqual(amount_in_words(1005), 'Kenya Shillings One Thousand and Five Only')
+        self.assertEqual(amount_in_words(Decimal('12550.50')),
+                         'Kenya Shillings Twelve Thousand Five Hundred and Fifty and Fifty Cents Only')
+        self.assertEqual(amount_in_words(2_340_000),
+                         'Kenya Shillings Two Million Three Hundred and Forty Thousand Only')
+        self.assertEqual(amount_in_words(99), 'Kenya Shillings Ninety-Nine Only')
