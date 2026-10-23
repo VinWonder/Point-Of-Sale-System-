@@ -11,7 +11,7 @@ from branches.models import Branch
 from customers.models import Customer
 from inventory.models import Stock
 from registers.models import Expense, Shift
-from sales.models import Sale
+from sales.models import Quotation, QuotationItem, Sale
 from . import metrics
 
 
@@ -56,6 +56,16 @@ def index(request):
         recent = recent.filter(branch=branch)
 
     month_expenses = expenses.aggregate(s=Sum('amount'))['s'] or Decimal('0.00')
+
+    quotes = Quotation.objects.all()
+    if branch:
+        quotes = quotes.filter(branch=branch)
+    open_quotes = quotes.filter(status=Quotation.Status.DRAFT).exclude(valid_until__lt=today)
+    open_value = QuotationItem.objects.filter(quotation__in=open_quotes).aggregate(
+        v=Sum(F('quantity') * F('unit_price')))['v'] or Decimal('0.00')
+    month_quotes = quotes.filter(created_at__date__gte=month_start)
+    month_quote_count = month_quotes.count()
+    converted = month_quotes.filter(status=Quotation.Status.CONVERTED).count()
     series = metrics.daily_series(today - timedelta(days=13), today, branch)
     top = metrics.top_products(today - timedelta(days=29), today, branch, limit=7)
 
@@ -68,6 +78,9 @@ def index(request):
         'month_growth': growth(month_totals['revenue'], last_month_totals['revenue']),
         'month_expenses': month_expenses,
         'month_net_profit': month_totals['gross_profit'] - month_expenses,
+        'open_quotes': open_quotes.count(),
+        'open_quotes_value': open_value,
+        'quote_conversion': round(converted / month_quote_count * 100) if month_quote_count else None,
         'debt_total': Customer.objects.aggregate(s=Sum('balance_owed'))['s'] or Decimal('0.00'),
         'low_stock': stocks.order_by('quantity')[:8],
         'low_stock_count': stocks.count(),
