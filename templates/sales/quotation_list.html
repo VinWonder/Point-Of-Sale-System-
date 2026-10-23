@@ -36,7 +36,13 @@
                 {% elif qt.is_expired or qt.status == 'EXPIRED' %}<span class="badge bg-secondary">Expired</span>
                 {% else %}<span class="badge bg-info text-dark">Open</span>{% endif %}
             </td>
-            <td class="text-end"><a href="{% url 'sales:quotation' qt.id %}" class="btn btn-sm btn-outline-secondary">Open</a></td>
+            <td class="text-end text-nowrap">
+                <a href="{% url 'sales:quotation' qt.id %}" class="btn btn-sm btn-outline-secondary" title="Open / print"><i class="bi bi-file-earmark-text"></i></a>
+                {% if qt.status == 'DRAFT' and not qt.is_expired %}
+                <a href="{% url 'sales:quotation_edit' qt.id %}" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+                <a href="{% url 'sales:quotation' qt.id %}?pay=1#pay" class="btn btn-sm btn-success" title="Record sale"><i class="bi bi-cash-coin"></i></a>
+                {% endif %}
+            </td>
         </tr>
         {% empty %}
         <tr><td colspan="9" class="text-center text-muted py-4">No quotations here.</td></tr>
