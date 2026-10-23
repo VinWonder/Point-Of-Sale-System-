@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from accounts.audit import log_action
@@ -87,16 +88,31 @@ def customer_detail(request, customer_id):
 
 @login_required
 def customer_create(request):
+    """Register a customer. Opened from a quotation (?quotation=ID), the new customer is attached to it."""
+    from sales.models import Quotation
+
+    quotation_id = request.POST.get('quotation') or request.GET.get('quotation') or ''
+    quotation = Quotation.objects.filter(
+        pk=quotation_id, status=Quotation.Status.DRAFT,
+    ).first() if quotation_id.isdigit() else None
+
     if request.method == 'POST':
         form = CustomerForm(request.POST, user=request.user)
         if form.is_valid():
             customer = form.save()
             log_action(request.user, f'Added customer {customer.name}', customer)
+            if quotation is not None:
+                quotation.customer, quotation.customer_name, quotation.customer_phone = customer, '', ''
+                quotation.save(update_fields=['customer', 'customer_name', 'customer_phone'])
+                messages.success(request, f'{customer.name} registered and attached to {quotation.reference}.')
+                return redirect(f"{reverse('sales:quotation', args=[quotation.id])}?pay=1")
             messages.success(request, 'Customer added.')
             return redirect('customers:customer_detail', customer_id=customer.id)
     else:
-        form = CustomerForm(user=request.user)
-    return render(request, 'customers/customer_form.html', {'form': form, 'title': 'Add Customer'})
+        form = CustomerForm(user=request.user, initial={
+            'name': request.GET.get('name', ''), 'phone_number': request.GET.get('phone', ''),
+        })
+    return render(request, 'customers/customer_form.html', {'form': form, 'title': 'Add Customer', 'quotation': quotation})
 
 
 @login_required

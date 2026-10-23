@@ -21,7 +21,7 @@ from core.models import ShopSettings
 from core.utils import paginate
 from customers.models import Customer
 from inventory.models import Category, Product, Stock
-from payments.mpesa import simulation_enabled
+from payments.mpesa import InvalidPhoneNumber, normalize_phone, simulation_enabled
 from registers.services import current_shift
 from .models import Sale, SaleReturn, Quotation
 from .quotations import save_quotation
@@ -147,6 +147,13 @@ def convert_quotation(request, quotation_id):
         return redirect('sales:quotation', quotation_id=quotation.id)
 
     payment_method = request.POST.get('payment_method', 'CASH')
+    mpesa_phone = ''
+    if payment_method == 'MPESA':
+        try:
+            mpesa_phone = normalize_phone(request.POST.get('mpesa_phone'))
+        except InvalidPhoneNumber as exc:
+            messages.error(request, str(exc))
+            return redirect(f"{reverse('sales:quotation', args=[quotation.id])}?pay=1")
     items = list(quotation.items.select_related('product'))
     lines = {}
     for item in items:
@@ -159,6 +166,7 @@ def convert_quotation(request, quotation_id):
                 user=request.user, branch=quotation.branch, lines=lines, customer=quotation.customer,
                 payment_method=payment_method, quotation=quotation, prices=prices,
                 customer_name=quotation.customer_name, customer_phone=quotation.customer_phone,
+                cash_tendered=request.POST.get('cash_tendered') if payment_method == 'CASH' else None,
             )
             quotation.status = Quotation.Status.CONVERTED
             quotation.save(update_fields=['status'])
@@ -167,6 +175,8 @@ def convert_quotation(request, quotation_id):
         return redirect('sales:quotation', quotation_id=quotation.id)
 
     messages.success(request, f'{quotation.reference} recorded as sale {sale.receipt_number}.')
+    if payment_method == 'MPESA':
+        return redirect(f"{reverse('sales:receipt', args=[sale.id])}?mpesa={mpesa_phone}")
     return redirect('sales:receipt', sale_id=sale.id)
 
 
@@ -175,13 +185,48 @@ def receipt(request, sale_id):
     sale = get_object_or_404(
         Sale.objects.select_related('branch', 'customer', 'served_by'), pk=sale_id
     )
-    return render(request, 'sales/receipt.html', {'sale': sale})
+    phone = request.GET.get('mpesa') or (sale.customer.phone_number if sale.customer else sale.customer_phone)
+    return render(request, 'sales/receipt.html', {
+        'sale': sale,
+        'mpesa_phone': phone,
+        'mpesa_simulation': simulation_enabled(),
+        'auto_mpesa': bool(request.GET.get('mpesa')),
+    })
+
+
+def _document_context(items, total):
+    from .models import vat_portion
+    return {
+        'items': items,
+        'total': total,
+        'vat': vat_portion(total, ShopSettings.load().vat_rate),
+        'filler_rows': range(max(0, 10 - len(items))),   # keep the printed grid the same height as the paper book
+    }
 
 
 @login_required
 def quotation_view(request, quotation_id):
-    quotation = get_object_or_404(Quotation, pk=quotation_id)
-    return render(request, 'sales/quotation.html', {'quotation': quotation})
+    quotation = get_object_or_404(
+        Quotation.objects.select_related('customer', 'branch', 'created_by'), pk=quotation_id,
+    )
+    items = list(quotation.items.select_related('product'))
+    can_sell = quotation.status == Quotation.Status.DRAFT and not quotation.is_expired
+    return render(request, 'sales/quotation.html', {
+        'quotation': quotation, 'can_sell': can_sell,
+        **_document_context(items, sum((i.subtotal for i in items), Decimal('0.00'))),
+    })
+
+
+@login_required
+def sale_invoice(request, sale_id):
+    """A4 invoice in the same layout as the quotation — for credit customers and companies."""
+    sale = get_object_or_404(
+        Sale.objects.select_related('customer', 'branch', 'served_by', 'quotation'), pk=sale_id,
+    )
+    items = list(sale.items.select_related('product'))
+    context = _document_context(items, sale.subtotal)
+    context.update({'sale': sale, 'payments': sale.payments.filter(status='SUCCESS')})
+    return render(request, 'sales/invoice.html', context)
 
 
 def filtered_sales(request):

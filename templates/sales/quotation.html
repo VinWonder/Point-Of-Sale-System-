@@ -1,87 +1,139 @@
 {% extends "base.html" %}
-{% load pos_tags %}
+{% load pos_tags static %}
 {% block title %}Quotation {{ quotation.reference }}{% endblock %}
 {% block page_title %}Quotations / {{ quotation.reference }}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
 {% block content %}
-<div class="row g-3">
-    <div class="col-xl-8">
-        <div class="card" id="quotation">
-            <div class="card-body p-4 p-md-5">
-                <div class="d-flex justify-content-between flex-wrap gap-3 mb-4">
-                    <div>
-                        <h4 class="fw-bold mb-0">{{ shop.business_name }}</h4>
-                        <div class="small text-muted">{{ quotation.branch.name }}{% if quotation.branch.location %}, {{ quotation.branch.location }}{% endif %}</div>
-                        {% if shop.phone_number %}<div class="small text-muted">Tel {{ shop.phone_number }}</div>{% endif %}
-                        {% if shop.email %}<div class="small text-muted">{{ shop.email }}</div>{% endif %}
-                        {% if shop.kra_pin %}<div class="small text-muted">KRA PIN {{ shop.kra_pin }}</div>{% endif %}
-                    </div>
-                    <div class="text-end">
-                        <h2 class="fw-bold text-uppercase mb-0" style="letter-spacing:.05em">Quotation</h2>
-                        <div class="fw-semibold">{{ quotation.reference }}</div>
-                        <div class="small">Date: {{ quotation.created_at|date:"d M Y" }}</div>
-                        {% if quotation.valid_until %}<div class="small">Valid until: <strong>{{ quotation.valid_until|date:"d M Y" }}</strong></div>{% endif %}
-                    </div>
+<div class="desk-layout">
+    <div class="doc position-relative">
+        {% if quotation.status == 'CONVERTED' %}<div class="doc-stamp paid">SOLD</div>
+        {% elif quotation.is_expired or quotation.status == 'EXPIRED' %}<div class="doc-stamp expired">EXPIRED</div>{% endif %}
+        <div class="doc-head">
+            {% with branch=quotation.branch %}{% include "partials/doc_brand.html" %}{% endwith %}
+            <div class="doc-title-block">
+                <div class="doc-title">Quotation</div>
+                <div class="doc-meta">
+                    <label>No.</label><div class="doc-line">{{ quotation.reference }}</div>
+                    <label>Date:</label><div class="doc-line">{{ quotation.created_at|date:"d/m/Y" }}</div>
+                    <label>Valid for:</label><div class="doc-line">{% if quotation.valid_until %}until {{ quotation.valid_until|date:"d/m/Y" }}{% endif %}</div>
                 </div>
-
-                <div class="mb-4">
-                    <div class="small text-muted text-uppercase">Prepared for</div>
-                    {% if quotation.customer %}
-                    <div class="fw-semibold">{{ quotation.customer.name }}</div>
-                    <div class="small">{{ quotation.customer.phone_number }}{% if quotation.customer.address %} · {{ quotation.customer.address }}{% endif %}</div>
-                    {% if quotation.customer.kra_pin %}<div class="small">KRA PIN {{ quotation.customer.kra_pin }}</div>{% endif %}
-                    {% else %}<div class="fw-semibold">Walk-in customer</div>{% endif %}
-                </div>
-
-                <table class="table">
-                    <thead class="table-light"><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th class="text-end">Unit price</th><th class="text-end">Amount</th></tr></thead>
-                    <tbody>
-                        {% for item in quotation.items.all %}
-                        <tr>
-                            <td class="text-muted">{{ forloop.counter }}</td>
-                            <td>{{ item.product.name }}<div class="small text-muted">{{ item.product.sku }}</div></td>
-                            <td class="text-end">{{ item.quantity }} {{ item.product.unit }}</td>
-                            <td class="text-end money">{{ item.unit_price|money }}</td>
-                            <td class="text-end money">{{ item.subtotal|money }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr class="fw-bold fs-5"><td colspan="4" class="text-end">Total (VAT inclusive)</td><td class="text-end money">{{ quotation.total|money }}</td></tr>
-                    </tfoot>
-                </table>
-                {% if quotation.notes %}<p class="small"><strong>Notes:</strong> {{ quotation.notes }}</p>{% endif %}
-                <p class="small text-muted mb-0">Prices are subject to stock availability and are guaranteed until the date shown. Prepared by {{ quotation.created_by.get_full_name|default:quotation.created_by.username }}.</p>
             </div>
         </div>
+
+        <div class="doc-client-tab">Client Details:</div>
+        <div class="doc-client">
+            <div class="client-name">{{ quotation.client_name }}</div>
+            {% if quotation.client_phone %}<div>Tel: {{ quotation.client_phone }}</div>{% endif %}
+            {% if quotation.customer.kra_pin %}<div>KRA PIN: {{ quotation.customer.kra_pin }}</div>{% endif %}
+            {% if quotation.customer.address %}<div>{{ quotation.customer.address }}</div>{% endif %}
+        </div>
+
+        <table class="doc-table">
+            <thead><tr><th>No.</th><th>Item description</th><th>Units</th><th>Price</th><th>Amount</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="num">{{ forloop.counter }}</td>
+                    <td>{{ item.product.name }}</td>
+                    <td class="units">{{ item.quantity }} {{ item.product.unit }}</td>
+                    <td class="price">{{ item.unit_price|floatformat:"2g" }}</td>
+                    <td class="amount">{{ item.subtotal|floatformat:"2g" }}</td>
+                </tr>
+                {% endfor %}
+                {% for n in filler_rows %}<tr><td class="num"></td><td></td><td class="units"></td><td class="price"></td><td class="amount"></td></tr>{% endfor %}
+            </tbody>
+            <tfoot>
+                <tr><td colspan="4" class="label">TOTAL (KES)</td><td class="amount">{{ total|floatformat:"2g" }}</td></tr>
+            </tfoot>
+        </table>
+        <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: {{ vat|money }}</div>
+        <div class="doc-words">{{ total|in_words }}</div>
+        {% if quotation.notes %}<div class="mt-2"><strong>Notes:</strong> {{ quotation.notes }}</div>{% endif %}
+
+        <div class="doc-foot">
+            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {% if quotation.created_by %}{{ quotation.created_by.get_full_name|default:quotation.created_by.username }}{% endif %}</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Customer signature / stamp</div></div>
+        </div>
+        <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
     </div>
-    <div class="col-xl-4 d-print-none">
-        <div class="card">
+
+    <aside class="desk-panel d-print-none">
+        <div class="card mb-3">
             <div class="card-body d-grid gap-2">
                 <div class="d-flex justify-content-between align-items-center">
-                    {% if quotation.status == 'CONVERTED' %}<span class="badge bg-success fs-6">Converted to sale</span>
-                    {% elif quotation.is_expired %}<span class="badge bg-secondary fs-6">Expired</span>
+                    {% if quotation.status == 'CONVERTED' %}<span class="badge bg-success fs-6">Sold</span>
+                    {% elif quotation.is_expired or quotation.status == 'EXPIRED' %}<span class="badge bg-secondary fs-6">Expired</span>
                     {% else %}<span class="badge bg-info text-dark fs-6">Open</span>{% endif %}
-                    <span class="fw-bold fs-5">{{ quotation.total|money }}</span>
+                    <span class="fw-bold fs-4">{{ total|money }}</span>
                 </div>
-                <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print / save as PDF</button>
-                {% if quotation.status == 'DRAFT' and not quotation.is_expired %}
-                <form method="post" action="{% url 'sales:convert_quotation' quotation.id %}" class="mt-2">
-                    {% csrf_token %}
-                    <label class="form-label small">Customer accepted? Convert at the quoted prices:</label>
-                    <select name="payment_method" class="form-select mb-2">
-                        <option value="CASH">Paid in cash</option>
-                        <option value="CARD">Paid by card</option>
-                        {% if quotation.customer %}<option value="CREDIT">Charge to customer account</option>{% endif %}
-                    </select>
-                    <button type="submit" class="btn btn-accent w-100"><i class="bi bi-check2-circle"></i> Convert to sale</button>
-                </form>
-                {% endif %}
+                <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print quotation</button>
+                {% if can_sell %}<a href="{% url 'sales:quotation_edit' quotation.id %}" class="btn btn-outline-secondary"><i class="bi bi-pencil"></i> Edit quotation</a>{% endif %}
                 {% for sale in quotation.sale_set.all %}
-                <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-success">View sale {{ sale.receipt_number }}</a>
+                <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-success"><i class="bi bi-receipt"></i> Sale {{ sale.receipt_number }}</a>
+                <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-success"><i class="bi bi-file-earmark-text"></i> A4 invoice</a>
                 {% endfor %}
-                <a href="{% url 'sales:quotation_list' %}" class="btn btn-link">All quotations</a>
+                <a href="{% url 'sales:quotation_desk' %}" class="btn btn-link">New quotation</a>
             </div>
         </div>
-    </div>
+
+        {% if can_sell %}
+        <div class="card border-success" id="pay" x-data="{ method: 'CASH', tendered: '' }">
+            <div class="card-header bg-success-subtle"><i class="bi bi-cash-coin"></i> Record sale</div>
+            <div class="card-body">
+                <p class="small text-muted">Customer accepted the quotation? Choose how they are paying. Stock is checked and deducted now.</p>
+                <form method="post" action="{% url 'sales:convert_quotation' quotation.id %}">
+                    {% csrf_token %}
+                    <div class="btn-group w-100 mb-2" role="group">
+                        <button type="button" class="btn btn-sm" :class="method === 'CASH' ? 'btn-dark' : 'btn-outline-dark'" @click="method = 'CASH'">Cash</button>
+                        <button type="button" class="btn btn-sm" :class="method === 'MPESA' ? 'btn-dark' : 'btn-outline-dark'" @click="method = 'MPESA'">M-Pesa</button>
+                        <button type="button" class="btn btn-sm" :class="method === 'CARD' ? 'btn-dark' : 'btn-outline-dark'" @click="method = 'CARD'">Card</button>
+                        <button type="button" class="btn btn-sm" :class="method === 'CREDIT' ? 'btn-dark' : 'btn-outline-dark'" @click="method = 'CREDIT'">Credit</button>
+                    </div>
+                    <input type="hidden" name="payment_method" :value="method">
+
+                    <div x-show="method === 'CASH'">
+                        <label class="form-label small mb-1">Cash received (optional)</label>
+                        <input type="number" name="cash_tendered" min="0" step="1" class="form-control mb-1" x-model="tendered" placeholder="{{ total|floatformat:0 }}">
+                        <div class="small text-success fw-semibold" x-show="Number(tendered) >= {{ total|stringformat:'s' }}">
+                            Change: KES <span x-text="(Number(tendered) - {{ total|stringformat:'s' }}).toLocaleString('en-KE', {minimumFractionDigits: 2})"></span>
+                        </div>
+                    </div>
+                    <div x-show="method === 'MPESA'">
+                        <label class="form-label small mb-1">Customer's M-Pesa number</label>
+                        <input type="tel" name="mpesa_phone" class="form-control" value="{{ quotation.client_phone }}" placeholder="0712 345 678">
+                        <div class="small text-muted mt-1">The sale is recorded as awaiting payment and the M-Pesa prompt is sent from the receipt.</div>
+                    </div>
+                    <div x-show="method === 'CREDIT'" class="small">
+                        {% if quotation.customer %}
+                            {% if quotation.customer.is_defaulter %}
+                            <div class="text-danger fw-semibold">{{ quotation.customer.name }} is over their credit limit — collect payment first.</div>
+                            {% else %}
+                            <div>Charge to <strong>{{ quotation.customer.name }}</strong>'s account.</div>
+                            <div>Credit available: <strong>{{ quotation.customer.available_credit|money }}</strong>
+                                {% if quotation.customer.available_credit < total %}<span class="text-danger">— not enough for this quotation</span>{% endif %}</div>
+                            {% endif %}
+                        {% else %}
+                        <div class="text-danger">Credit needs a registered customer.</div>
+                        <a href="{% url 'customers:customer_create' %}?name={{ quotation.customer_name|urlencode }}&phone={{ quotation.customer_phone|urlencode }}&quotation={{ quotation.id }}">Register {{ quotation.customer_name|default:"this customer" }}</a>
+                        — they'll be attached to this quotation automatically.
+                        {% endif %}
+                    </div>
+
+                    <button class="btn btn-success w-100 mt-3" onclick="return confirm('Record this sale and deduct stock?');">
+                        <i class="bi bi-check2-circle"></i> Record sale — {{ total|money }}
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </aside>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    if (new URLSearchParams(location.search).get('pay') === '1') {
+        const pay = document.getElementById('pay');
+        if (pay) pay.scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
 {% endblock %}

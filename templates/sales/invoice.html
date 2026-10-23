@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load pos_tags static %}
+{% block title %}Invoice {{ sale.receipt_number }}{% endblock %}
+{% block page_title %}Sales / Invoice {{ sale.receipt_number }}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
+{% block content %}
+<div class="desk-layout">
+    <div class="doc position-relative">
+        {% if sale.is_voided %}<div class="doc-stamp void">VOID</div>
+        {% elif sale.payment_status == 'PAID' %}<div class="doc-stamp paid">PAID</div>{% endif %}
+        <div class="doc-head">
+            {% with branch=sale.branch %}{% include "partials/doc_brand.html" %}{% endwith %}
+            <div class="doc-title-block">
+                <div class="doc-title">{% if sale.sale_type == 'CREDIT' %}Invoice{% else %}Cash Sale{% endif %}</div>
+                <div class="doc-meta">
+                    <label>No.</label><div class="doc-line">{{ sale.receipt_number }}</div>
+                    <label>Date:</label><div class="doc-line">{{ sale.created_at|date:"d/m/Y" }}</div>
+                    {% if sale.quotation %}<label>Quotation:</label><div class="doc-line">{{ sale.quotation.reference }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="doc-client-tab">Client Details:</div>
+        <div class="doc-client">
+            <div class="client-name">{{ sale.client_name }}</div>
+            {% if sale.customer %}
+                <div>Tel: {{ sale.customer.phone_number }}</div>
+                {% if sale.customer.kra_pin %}<div>KRA PIN: {{ sale.customer.kra_pin }}</div>{% endif %}
+                {% if sale.customer.address %}<div>{{ sale.customer.address }}</div>{% endif %}
+            {% elif sale.customer_phone %}<div>Tel: {{ sale.customer_phone }}</div>{% endif %}
+        </div>
+
+        <table class="doc-table">
+            <thead><tr><th>No.</th><th>Item description</th><th>Units</th><th>Price</th><th>Amount</th></tr></thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="num">{{ forloop.counter }}</td>
+                    <td>{{ item.product.name }}{% if item.returned_quantity %} <small class="text-muted">({{ item.returned_quantity }} returned)</small>{% endif %}</td>
+                    <td class="units">{{ item.quantity }} {{ item.product.unit }}</td>
+                    <td class="price">{{ item.unit_price|floatformat:"2g" }}</td>
+                    <td class="amount">{{ item.subtotal|floatformat:"2g" }}</td>
+                </tr>
+                {% endfor %}
+                {% for n in filler_rows %}<tr><td class="num"></td><td></td><td class="units"></td><td class="price"></td><td class="amount"></td></tr>{% endfor %}
+            </tbody>
+            <tfoot>
+                {% if sale.discount_amount %}
+                <tr><td colspan="4" class="label">Sub-total</td><td class="amount">{{ sale.subtotal|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Discount</td><td class="amount">-{{ sale.discount_amount|floatformat:"2g" }}</td></tr>
+                {% endif %}
+                <tr><td colspan="4" class="label">TOTAL (KES)</td><td class="amount">{{ sale.total|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Paid</td><td class="amount">{{ sale.amount_paid|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Balance due</td><td class="amount">{{ sale.balance_due|floatformat:"2g" }}</td></tr>
+            </tfoot>
+        </table>
+        <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: {{ sale.tax_amount|money }}</div>
+        <div class="doc-words">{{ sale.total|in_words }}</div>
+        {% if payments %}
+        <div class="small mt-2"><strong>Payments:</strong>
+            {% for p in payments %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.mpesa_receipt_number %} ({{ p.mpesa_receipt_number }}){% elif p.reference %} ({{ p.reference }}){% endif %} on {{ p.created_at|date:"d/m/Y" }}{% if not forloop.last %}; {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        {% if sale.sale_type == 'CREDIT' and sale.balance_due > 0 %}
+        <div class="small mt-1"><strong>Terms:</strong> Payable to {{ shop.business_name }}. Quote {{ sale.receipt_number }} when paying.</div>
+        {% endif %}
+
+        <div class="doc-foot">
+            <div><div style="height:28px"></div><div class="doc-sign">Served by: {% if sale.served_by %}{{ sale.served_by.get_full_name|default:sale.served_by.username }}{% endif %}</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Received by (name, signature, stamp)</div></div>
+        </div>
+        <div class="doc-terms">{{ shop.receipt_footer }}</div>
+    </div>
+
+    <aside class="desk-panel d-print-none">
+        <div class="card"><div class="card-body d-grid gap-2">
+            <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print invoice</button>
+            <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-secondary"><i class="bi bi-receipt"></i> Till receipt</a>
+            {% if sale.customer %}<a href="{% url 'customers:customer_detail' sale.customer.id %}" class="btn btn-outline-secondary">Customer statement</a>{% endif %}
+        </div></div>
+    </aside>
+</div>
+{% endblock %}

@@ -439,3 +439,76 @@ class QuotationDeskViewTests(SaleTestMixin, TestCase):
         self.client.force_login(self.cashier)
         res = self.client.get(reverse('sales:quotation_edit', args=[q.pk]))
         self.assertRedirects(res, reverse('sales:quotation', args=[q.pk]))
+
+
+class RecordSaleFromQuotationTests(SaleTestMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.cashier)
+
+    def quote(self, **kw):
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier, **kw)
+        QuotationItem.objects.create(quotation=q, product=self.cement, quantity=2, unit_price=780)
+        return q
+
+    def record(self, q, **data):
+        return self.client.post(reverse('sales:convert_quotation', args=[q.pk]), data)
+
+    def test_cash_with_change(self):
+        q = self.quote()
+        self.record(q, payment_method='CASH', cash_tendered='2000')
+        sale = Sale.objects.get()
+        self.assertEqual(sale.total, Decimal('1560.00'))
+        self.assertEqual(sale.change_given, Decimal('440.00'))
+        self.assertEqual(self.stock_of(self.cement), 48)
+
+    def test_mpesa_goes_to_receipt_awaiting_payment(self):
+        q = self.quote(customer_name='Wanjiru', customer_phone='0722000111')
+        res = self.record(q, payment_method='MPESA', mpesa_phone='0722 000 111')
+        sale = Sale.objects.get()
+        self.assertEqual(sale.status, Sale.Status.PENDING_PAYMENT)
+        self.assertRedirects(res, reverse('sales:receipt', args=[sale.pk]) + '?mpesa=254722000111')
+        self.assertContains(self.client.get(res.url), 'Request M-Pesa payment')
+
+    def test_mpesa_bad_phone_does_not_sell(self):
+        q = self.quote()
+        self.record(q, payment_method='MPESA', mpesa_phone='12')
+        self.assertFalse(Sale.objects.exists())
+
+    def test_credit_needs_registered_customer(self):
+        q = self.quote(customer_name='Not registered')
+        self.record(q, payment_method='CREDIT')
+        self.assertFalse(Sale.objects.exists())
+
+    def test_credit_for_registered_customer_and_invoice(self):
+        customer = Customer.objects.create(name='Otieno Builders', phone_number='254711000222',
+                                           credit_limit=10000, kra_pin='P051111111A')
+        q = self.quote(customer=customer)
+        self.record(q, payment_method='CREDIT')
+        sale = Sale.objects.get()
+        customer.refresh_from_db()
+        self.assertEqual(customer.balance_owed, Decimal('1560.00'))
+        res = self.client.get(reverse('sales:invoice', args=[sale.pk]))
+        self.assertContains(res, 'Invoice')
+        self.assertContains(res, 'P051111111A')
+        self.assertContains(res, 'Kenya Shillings One Thousand Five Hundred and Sixty Only')
+
+    def test_quotation_page_renders_paper(self):
+        q = self.quote(customer_name='Mzee Otieno')
+        res = self.client.get(reverse('sales:quotation', args=[q.pk]))
+        self.assertContains(res, 'Mzee Otieno')
+        self.assertContains(res, q.reference)
+        self.assertEqual(len(res.context['filler_rows']), 9)
+
+    def test_register_walk_in_from_quotation_attaches_customer(self):
+        q = self.quote(customer_name='Kamau Hardware Fundi', customer_phone='0733000444')
+        form = self.client.get(reverse('customers:customer_create'),
+                               {'name': q.customer_name, 'phone': q.customer_phone, 'quotation': q.pk})
+        self.assertEqual(form.context['form'].initial['name'], 'Kamau Hardware Fundi')
+        self.client.post(reverse('customers:customer_create'), {
+            'name': 'Kamau Hardware Fundi', 'customer_type': 'CONTRACTOR', 'phone_number': '0733000444',
+            'credit_limit': '0', 'is_active': 'on', 'quotation': q.pk,
+        })
+        q.refresh_from_db()
+        self.assertEqual(q.customer.phone_number, '254733000444')
+        self.assertEqual(q.customer_name, '')

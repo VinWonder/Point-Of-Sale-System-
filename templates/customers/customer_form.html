@@ -5,6 +5,8 @@
 {% block content %}
 <form method="post">
     {% csrf_token %}
+    {% if quotation %}<input type="hidden" name="quotation" value="{{ quotation.id }}">
+    <div class="alert alert-info py-2">After saving, this customer will be attached to {{ quotation.reference }}.</div>{% endif %}
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card">
