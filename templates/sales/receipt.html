@@ -75,11 +75,32 @@
                     <span class="fw-bold fs-5">{{ sale.total|money }}</span>
                 </div>
                 <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print receipt</button>
+                <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-dark"><i class="bi bi-file-earmark-text"></i> A4 invoice</a>
                 <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-cart-plus"></i> New sale <kbd>F2</kbd></a>
                 <a href="{% url 'sales:sale_list' %}" class="btn btn-outline-secondary">Sales history</a>
                 {% if sale.customer %}<a href="{% url 'customers:customer_detail' sale.customer.id %}" class="btn btn-outline-secondary">Customer statement</a>{% endif %}
             </div>
         </div>
+
+        {% if not sale.is_voided and sale.balance_due > 0 %}
+        <div class="card mt-3 border-success" x-data="mpesaRequest({{ sale.id }}, '{{ mpesa_phone|default:''|escapejs }}', {{ auto_mpesa|yesno:'true,false' }})" x-init="init()">
+            <div class="card-body">
+                <h6 class="text-success"><i class="bi bi-phone"></i> Request M-Pesa payment</h6>
+                <p class="small text-muted mb-2">Sends a prompt for the balance of {{ sale.balance_due|money }}.</p>
+                <input type="tel" class="form-control form-control-sm mb-2" x-model="phone" placeholder="0712 345 678" :disabled="busy">
+                <button type="button" class="btn btn-sm btn-success w-100" @click="send()" :disabled="busy">
+                    <span x-show="!busy">Send M-Pesa prompt</span><span x-show="busy"><span class="spinner-border spinner-border-sm"></span> Waiting for customer…</span>
+                </button>
+                <div class="small mt-2" :class="error ? 'text-danger' : 'text-muted'" x-text="message"></div>
+                {% if mpesa_simulation %}
+                <div class="d-flex gap-1 mt-2" x-show="paymentId && busy">
+                    <button type="button" class="btn btn-sm btn-outline-success" @click="simulate('success')">Demo: paid</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @click="simulate('cancel')">Demo: cancelled</button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
 
         {% if not sale.is_voided and user.role != 'CASHIER' %}
         <a href="{% url 'sales:sale_return' sale.id %}" class="btn btn-outline-warning w-100 mt-3"><i class="bi bi-arrow-return-left"></i> Customer return / refund</a>
@@ -100,6 +121,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/mpesa-request.js' %}"></script>
 <script>
     // Print straight away after a sale is rung up — saves a click at a busy counter.
     if (new URLSearchParams(window.location.search).get('new') === '1') {
