@@ -22,8 +22,20 @@ Chart.js · Safaricom M-Pesa (Daraja STK Push)
 - **Discounts** – cashiers are capped at a configurable percentage;
   managers can approve more.
 - **Hold & recall** – park a sale while a customer fetches more items.
-- **Quotations** – print an A4 quotation with validity date; convert it to a
-  sale at the quoted prices once the customer accepts.
+- **Quotation Desk** – write a quotation on screen exactly like the paper
+  duplicate book: your logo and company details, **QUOTATION** title,
+  automatic number (QT-0001, QT-0002…), today's date and validity, a
+  Client Details box (walk-in, walk-in with a name, or a registered
+  customer found as you type), and a numbered item grid where typing in
+  *Item description* searches the catalogue (arrow keys + Enter) and fills
+  units, price and amount. Prices can be negotiated within your role's
+  limits, and the total is written in words.
+- **Print before payment** – print the draft for the customer to check, save
+  it, then **Record sale** with cash (change shown), M-Pesa, card or credit.
+  Walk-ins can be registered from the quotation for credit. Quotations can
+  be edited, re-quoted at today's prices, and sent on **WhatsApp**.
+- **A4 invoices** – every sale also prints as an Invoice / Cash Sale in the
+  same layout, with payments and balance due.
 - **Receipts** – 80 mm thermal layout with KRA PIN, VAT breakdown, payments,
   change and balance due; prints automatically after each sale.
 - **Returns & refunds** – restock (or write off damaged goods), refund in cash,
@@ -107,8 +119,9 @@ Open <http://127.0.0.1:8000/> and log in.
 All demo passwords are `ChangeMe123!` — **change them before real use.**
 To start from scratch instead, skip `seed_demo` and run
 `python manage.py createsuperuser`, then set the user's role to Owner in
-`/admin/`. Shop name, KRA PIN, VAT rate and receipt footer are under
-**Shop Settings**.
+`/admin/`. Company name, **logo** (optional), KRA PIN, address, VAT rate and receipt
+footer are under **Shop Settings** and appear on quotations, invoices and
+receipts.
 
 ## M-Pesa
 
@@ -141,7 +154,7 @@ python manage.py stock_alerts        # print low / out-of-stock items per branch
 python manage.py test
 ```
 
-122 tests cover checkout rules, credit limits, returns, voids, M-Pesa
+160+ tests cover checkout rules, credit limits, returns, voids, M-Pesa
 callbacks, cash-up maths, stock ledger, transfers, CSV import, report
 figures, role permissions, and a smoke test that opens every page as every
 role. GitHub Actions runs them on SQLite and PostgreSQL for every push.
