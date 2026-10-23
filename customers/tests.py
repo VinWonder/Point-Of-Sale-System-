@@ -91,3 +91,17 @@ class CustomerFormTests(TestCase):
         c = Customer(credit_limit=100, balance_owed=150)
         self.assertTrue(c.is_defaulter)
         self.assertEqual(c.available_credit, 0)
+
+
+class CustomerSearchApiTests(TestCase):
+    def test_search_by_name_and_phone(self):
+        user = User.objects.create_user(username='c', password='pw-123456!')
+        Customer.objects.create(name='Otieno Builders', phone_number='254711222333', credit_limit=1000,
+                                balance_owed=1500)
+        self.client.force_login(user)
+        url = reverse('customers:customer_search_api')
+        by_name = self.client.get(url, {'q': 'otieno'}).json()['results']
+        self.assertEqual(by_name[0]['name'], 'Otieno Builders')
+        self.assertTrue(by_name[0]['blocked'])
+        self.assertEqual(len(self.client.get(url, {'q': '222333'}).json()['results']), 1)
+        self.assertEqual(self.client.get(url, {'q': 'o'}).json()['results'], [])

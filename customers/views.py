@@ -135,3 +135,25 @@ def record_debt_payment_view(request, customer_id):
         except DebtPaymentError as exc:
             messages.error(request, str(exc))
     return redirect(request.POST.get('next') or 'customers:customer_list')
+
+
+@login_required
+def customer_search_api(request):
+    """Type-ahead lookup of registered customers by name, phone or KRA PIN."""
+    from django.http import JsonResponse
+
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+    customers = Customer.objects.filter(is_active=True).filter(
+        Q(name__icontains=q) | Q(phone_number__icontains=q) | Q(kra_pin__iexact=q)
+    ).order_by('name')[:10]
+    return JsonResponse({'results': [
+        {
+            'id': c.id, 'name': c.name, 'phone': c.phone_number, 'type': c.get_customer_type_display(),
+            'kra_pin': c.kra_pin, 'address': c.address,
+            'balance': str(c.balance_owed), 'credit_limit': str(c.credit_limit),
+            'available': str(c.available_credit), 'blocked': c.is_defaulter,
+        }
+        for c in customers
+    ]})

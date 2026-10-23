@@ -209,3 +209,29 @@ class PageTests(InventoryTestBase):
     def test_cashier_does_not_see_cost(self):
         self.client.force_login(self.cashier)
         self.assertNotContains(self.client.get(reverse('inventory:product_list')), '1,500.00')
+
+
+class ProductSearchApiTests(InventoryTestBase):
+    def setUp(self):
+        super().setUp()
+        Product.objects.create(sku='PNT-GLS', name='Gloss Paint 1L', cost_price=400, sell_price=550)
+        Product.objects.create(sku='OLD', name='Paint Old Stock', cost_price=1, sell_price=2, is_active=False)
+        adjust_stock(self.paint, self.main, 7, StockMovement.Kind.PURCHASE)
+        self.client.force_login(self.cashier)
+
+    def search(self, q):
+        return self.client.get(reverse('inventory:product_search_api'), {'q': q}).json()['results']
+
+    def test_name_prefix_ranks_first_and_inactive_hidden(self):
+        names = [r['name'] for r in self.search('paint')]
+        self.assertEqual(names, ['Paint 4L', 'Gloss Paint 1L'])
+
+    def test_exact_sku_first_with_branch_stock(self):
+        first = self.search('PNT')[0]
+        self.assertEqual(first['sku'], 'PNT')
+        self.assertEqual(first['stock'], 7)
+        self.assertEqual(first['price'], '1850.00')
+
+    def test_requires_login(self):
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('inventory:product_search_api'), {'q': 'p'}).status_code, 302)

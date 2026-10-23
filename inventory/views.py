@@ -327,3 +327,40 @@ def shelf_labels(request):
         'categories': Category.objects.order_by('name'),
         'current_category': category, 'q': q,
     })
+
+
+@login_required
+def product_search_api(request):
+    """
+    Type-ahead search for quotation/invoice lines. Exact SKU or barcode hits
+    come first, then names starting with the text, then any other match.
+    """
+    from django.db.models import Case, IntegerField, When
+    from django.http import JsonResponse
+
+    q = request.GET.get('q', '').strip()
+    if len(q) < 1:
+        return JsonResponse({'results': []})
+    products = (
+        Product.objects.filter(is_active=True)
+        .filter(Q(name__icontains=q) | Q(sku__icontains=q) | Q(barcode=q) | Q(brand__icontains=q))
+        .annotate(rank=Case(
+            When(Q(sku__iexact=q) | Q(barcode=q), then=0),
+            When(name__istartswith=q, then=1),
+            default=2, output_field=IntegerField(),
+        ))
+        .order_by('rank', 'name')[:15]
+    )
+    stock = dict(Stock.objects.filter(
+        branch_id=request.user.branch_id, product__in=products,
+    ).values_list('product_id', 'quantity')) if request.user.branch_id else {}
+    return JsonResponse({'results': [
+        {
+            'id': p.id, 'name': p.name, 'sku': p.sku, 'brand': p.brand, 'unit': p.unit,
+            'price': str(p.sell_price),
+            'wholesale_price': str(p.wholesale_price) if p.wholesale_price else None,
+            'wholesale_min_qty': p.wholesale_min_qty,
+            'stock': stock.get(p.id, 0),
+        }
+        for p in products
+    ]})
