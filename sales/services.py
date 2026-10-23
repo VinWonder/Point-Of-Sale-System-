@@ -93,7 +93,8 @@ def check_discount_allowed(user, subtotal, discount, settings):
 
 @transaction.atomic
 def checkout(*, user, branch, raw_items=None, lines=None, customer=None, payment_method='CASH',
-             discount=0, cash_tendered=None, notes='', quotation=None, prices=None):
+             discount=0, cash_tendered=None, notes='', quotation=None, prices=None,
+             customer_name='', customer_phone=''):
     """
     Create a completed sale and move stock. Returns the Sale.
 
@@ -145,6 +146,8 @@ def checkout(*, user, branch, raw_items=None, lines=None, customer=None, payment
 
     sale = Sale.objects.create(
         customer=customer, branch=branch, served_by=user, quotation=quotation,
+        customer_name='' if customer else customer_name.strip()[:150],
+        customer_phone='' if customer else customer_phone.strip()[:20],
         discount_amount=discount, cash_tendered=tendered, notes=notes[:255],
         sale_type=Sale.SaleType.CREDIT if payment_method == 'CREDIT' else Sale.SaleType.CASH,
         status=Sale.Status.PENDING_PAYMENT if payment_method == 'MPESA' else Sale.Status.COMPLETED,

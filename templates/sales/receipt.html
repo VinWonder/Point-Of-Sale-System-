@@ -18,11 +18,11 @@
         <div class="r-row"><span>{% if sale.sale_type == 'CREDIT' %}INVOICE{% else %}RECEIPT{% endif %}</span><span>{{ sale.receipt_number }}</span></div>
         <div class="r-row"><span>Date</span><span>{{ sale.created_at|date:"d/m/Y H:i" }}</span></div>
         <div class="r-row"><span>Served by</span><span>{{ sale.served_by.get_full_name|default:sale.served_by.username }}</span></div>
-        {% if sale.customer %}
-        <div class="r-row"><span>Customer</span><span>{{ sale.customer.name }}</span></div>
+        {% if sale.customer or sale.customer_name %}
+        <div class="r-row"><span>Customer</span><span>{{ sale.client_name }}</span></div>
         {% if sale.customer.kra_pin %}<div class="r-row"><span>Cust. PIN</span><span>{{ sale.customer.kra_pin }}</span></div>{% endif %}
         {% endif %}
-        {% if sale.quotation_id %}<div class="r-row"><span>From quote</span><span>#{{ sale.quotation_id }}</span></div>{% endif %}
+        {% if sale.quotation_id %}<div class="r-row"><span>From quote</span><span>{{ sale.quotation.reference }}</span></div>{% endif %}
         <div class="r-rule"></div>
 
         {% for item in sale.items.all %}

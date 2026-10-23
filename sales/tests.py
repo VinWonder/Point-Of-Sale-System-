@@ -321,4 +321,32 @@ class QuotationExpiryTests(SaleTestMixin, TestCase):
         q.refresh_from_db()
         self.assertEqual(q.status, Quotation.Status.EXPIRED)
         res = self.client.get(reverse('sales:quotation_list'), {'status': 'expired'})
-        self.assertContains(res, f'Q-{q.pk}')
+        self.assertContains(res, q.reference)
+
+
+class QuotationNumberingTests(SaleTestMixin, TestCase):
+    def test_numbers_are_sequential_from_one(self):
+        refs = [Quotation.objects.create(branch=self.branch, created_by=self.cashier).reference for _ in range(3)]
+        self.assertEqual(refs, ['QT-0001', 'QT-0002', 'QT-0003'])
+
+    def test_deleting_does_not_reuse_number_in_the_middle(self):
+        first = Quotation.objects.create(branch=self.branch)
+        Quotation.objects.create(branch=self.branch)
+        first.delete()
+        self.assertEqual(Quotation.objects.create(branch=self.branch).number, 3)
+
+    def test_walk_in_name_carried_to_sale(self):
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier,
+                                     customer_name='Mzee Otieno', customer_phone='0722111222')
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=1, unit_price=150)
+        self.client.force_login(self.cashier)
+        self.client.post(reverse('sales:convert_quotation', args=[q.pk]))
+        sale = Sale.objects.get()
+        self.assertEqual(sale.client_name, 'Mzee Otieno')
+        self.assertContains(self.client.get(reverse('sales:receipt', args=[sale.pk])), 'Mzee Otieno')
+
+    def test_search_by_reference(self):
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier)
+        self.client.force_login(self.cashier)
+        res = self.client.get(reverse('sales:quotation_list'), {'q': q.reference, 'status': 'all'})
+        self.assertEqual(list(res.context['page_obj']), [q])

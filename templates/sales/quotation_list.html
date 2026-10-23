@@ -24,9 +24,9 @@
     <tbody>
         {% for qt in page_obj %}
         <tr>
-            <td class="fw-semibold">Q-{{ qt.id }}</td>
+            <td class="fw-semibold">{{ qt.reference }}</td>
             <td class="small text-nowrap">{{ qt.created_at|date:"d M Y" }}<div class="text-muted">{{ qt.created_by.username|default:"" }}</div></td>
-            <td>{{ qt.customer|default:"Walk-in" }}{% if qt.notes %}<div class="small text-muted">{{ qt.notes|truncatechars:40 }}</div>{% endif %}</td>
+            <td>{{ qt.client_name }}{% if qt.notes %}<div class="small text-muted">{{ qt.notes|truncatechars:40 }}</div>{% endif %}</td>
             <td class="small">{{ qt.branch }}</td>
             <td class="small">{{ qt.items.all|length }}</td>
             <td class="text-end money fw-semibold">{{ qt.total|money }}</td>

@@ -64,7 +64,7 @@
         <tr class="{% if s.is_voided %}text-muted text-decoration-line-through{% endif %}">
             <td class="fw-semibold">{{ s.receipt_number }}</td>
             <td class="small text-nowrap">{{ s.created_at|date:"d M Y H:i" }}</td>
-            <td>{% if s.customer %}<a href="{% url 'customers:customer_detail' s.customer.id %}">{{ s.customer.name }}</a>{% else %}<span class="text-muted">Walk-in</span>{% endif %}</td>
+            <td>{% if s.customer %}<a href="{% url 'customers:customer_detail' s.customer.id %}">{{ s.customer.name }}</a>{% elif s.customer_name %}{{ s.customer_name }} <span class="badge text-bg-light border">walk-in</span>{% else %}<span class="text-muted">Walk-in</span>{% endif %}</td>
             <td class="small">{{ s.branch }}</td>
             <td class="small">{{ s.served_by.username|default:"—" }}</td>
             <td class="text-end money fw-semibold">{{ s.total|money }}</td>

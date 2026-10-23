@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load pos_tags %}
-{% block title %}Quotation Q-{{ quotation.id }}{% endblock %}
-{% block page_title %}Quotations / Q-{{ quotation.id }}{% endblock %}
+{% block title %}Quotation {{ quotation.reference }}{% endblock %}
+{% block page_title %}Quotations / {{ quotation.reference }}{% endblock %}
 {% block content %}
 <div class="row g-3">
     <div class="col-xl-8">
@@ -17,7 +17,7 @@
                     </div>
                     <div class="text-end">
                         <h2 class="fw-bold text-uppercase mb-0" style="letter-spacing:.05em">Quotation</h2>
-                        <div class="fw-semibold">Q-{{ quotation.id }}</div>
+                        <div class="fw-semibold">{{ quotation.reference }}</div>
                         <div class="small">Date: {{ quotation.created_at|date:"d M Y" }}</div>
                         {% if quotation.valid_until %}<div class="small">Valid until: <strong>{{ quotation.valid_until|date:"d M Y" }}</strong></div>{% endif %}
                     </div>

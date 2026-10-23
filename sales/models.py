@@ -22,13 +22,40 @@ class Quotation(models.Model):
         CONVERTED = "CONVERTED", "Converted to Sale"
         EXPIRED = "EXPIRED", "Expired"
 
+    number = models.PositiveIntegerField(
+        unique=True, null=True, editable=False, help_text="Sequential quotation number: 1, 2, 3...",
+    )
     customer = models.ForeignKey("customers.Customer", on_delete=models.SET_NULL, null=True, blank=True)
+    customer_name = models.CharField(
+        max_length=150, blank=True, help_text="Name for a walk-in customer who isn't registered",
+    )
+    customer_phone = models.CharField(max_length=20, blank=True)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     created_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     valid_until = models.DateField(null=True, blank=True)
     notes = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.number is None:
+            self.number = next_quotation_number()
+        super().save(*args, **kwargs)
+
+    @property
+    def reference(self):
+        return f"QT-{self.number:04d}" if self.number else f"QT-{self.pk}"
+
+    @property
+    def client_name(self):
+        """What to print in 'Client details': registered customer, named walk-in, or Walk-in."""
+        if self.customer_id:
+            return self.customer.name
+        return self.customer_name or "Walk-in customer"
+
+    @property
+    def client_phone(self):
+        return self.customer.phone_number if self.customer_id else self.customer_phone
 
     @property
     def total(self):
@@ -39,7 +66,22 @@ class Quotation(models.Model):
         return bool(self.valid_until and self.valid_until < timezone.localdate())
 
     def __str__(self):
-        return f"Quotation #{self.pk} - {self.customer or 'Walk-in'}"
+        return f"{self.reference} - {self.client_name}"
+
+
+def next_quotation_number():
+    """
+    Next number in the 1, 2, 3... sequence. Locks the single settings row so
+    two tills saving at the same moment can't get the same number. Must run
+    inside a transaction (Quotation.save is called from atomic blocks).
+    """
+    from django.db import transaction
+    from django.db.models import Max
+    from core.models import ShopSettings
+
+    with transaction.atomic():
+        ShopSettings.objects.select_for_update().get_or_create(pk=1)
+        return (Quotation.objects.aggregate(m=Max("number"))["m"] or 0) + 1
 
 
 class QuotationItem(models.Model):
@@ -72,6 +114,8 @@ class Sale(models.Model):
 
     quotation = models.ForeignKey(Quotation, on_delete=models.SET_NULL, null=True, blank=True)
     customer = models.ForeignKey("customers.Customer", on_delete=models.SET_NULL, null=True, blank=True)
+    customer_name = models.CharField(max_length=150, blank=True, help_text="Walk-in customer's name, if given")
+    customer_phone = models.CharField(max_length=20, blank=True)
     branch = models.ForeignKey("branches.Branch", on_delete=models.CASCADE)
     served_by = models.ForeignKey("accounts.User", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.COMPLETED)
@@ -102,6 +146,12 @@ class Sale(models.Model):
     @property
     def receipt_number(self):
         return f"R{self.branch_id:02d}-{self.pk:06d}" if self.pk else ""
+
+    @property
+    def client_name(self):
+        if self.customer_id:
+            return self.customer.name
+        return self.customer_name or "Walk-in customer"
 
     @property
     def balance_due(self):

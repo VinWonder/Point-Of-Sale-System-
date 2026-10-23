@@ -141,7 +141,7 @@ def create_quotation(request):
                 quotation=quotation, product=product, quantity=qty,
                 unit_price=product.price_for_quantity(qty),
             )
-    log_action(request.user, f'Created quotation #{quotation.pk}', quotation)
+    log_action(request.user, f'Created quotation {quotation.reference}', quotation)
     return JsonResponse({'quotation_id': quotation.id})
 
 
@@ -166,6 +166,7 @@ def convert_quotation(request, quotation_id):
             sale = checkout(
                 user=request.user, branch=quotation.branch, lines=lines, customer=quotation.customer,
                 payment_method=payment_method, quotation=quotation, prices=prices,
+                customer_name=quotation.customer_name, customer_phone=quotation.customer_phone,
             )
             quotation.status = Quotation.Status.CONVERTED
             quotation.save(update_fields=['status'])
@@ -173,7 +174,7 @@ def convert_quotation(request, quotation_id):
         messages.error(request, str(exc))
         return redirect('sales:quotation', quotation_id=quotation.id)
 
-    messages.success(request, f'Quotation #{quotation.id} converted to sale #{sale.id}.')
+    messages.success(request, f'{quotation.reference} recorded as sale {sale.receipt_number}.')
     return redirect('sales:receipt', sale_id=sale.id)
 
 
@@ -267,8 +268,10 @@ def quotation_list(request):
     q = request.GET.get('q', '').strip()
     if q:
         query = Q(customer__name__icontains=q) | Q(customer__phone_number__icontains=q) | Q(notes__icontains=q)
-        if q.lstrip('#').isdigit():
-            query |= Q(pk=int(q.lstrip('#')))
+        digits = q.upper().replace('QT', '').strip('-# ')
+        if digits.isdigit():
+            query |= Q(number=int(digits))
+        query |= Q(customer_name__icontains=q) | Q(customer_phone__icontains=q)
         quotations = quotations.filter(query)
     return render(request, 'sales/quotation_list.html', {
         'page_obj': paginate(request, quotations.order_by('-created_at')),
