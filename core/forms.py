@@ -1,13 +1,20 @@
 from django import forms
 
+from .images import logo_to_data_uri
 from .models import ShopSettings
 
 
 class ShopSettingsForm(forms.ModelForm):
+    logo_upload = forms.ImageField(
+        required=False, label='Company logo',
+        help_text='Optional. PNG or JPG, square works best. Shown on quotations, invoices and receipts.',
+    )
+    remove_logo = forms.BooleanField(required=False, label='Remove current logo')
+
     class Meta:
         model = ShopSettings
         fields = (
-            'business_name', 'tagline', 'kra_pin', 'phone_number', 'email', 'address',
+            'business_name', 'show_logo', 'tagline', 'kra_pin', 'phone_number', 'email', 'address',
             'vat_rate', 'receipt_footer', 'max_cashier_discount_percent',
             'quotation_validity_days', 'require_open_shift',
         )
@@ -23,3 +30,20 @@ class ShopSettingsForm(forms.ModelForm):
         if not 0 <= value <= 100:
             raise forms.ValidationError('Enter a percentage between 0 and 100.')
         return value
+
+    def clean_logo_upload(self):
+        upload = self.cleaned_data.get('logo_upload')
+        if upload:
+            upload.seek(0)
+            return logo_to_data_uri(upload)
+        return None
+
+    def save(self, commit=True):
+        settings = super().save(commit=False)
+        if self.cleaned_data.get('remove_logo'):
+            settings.logo = ''
+        elif self.cleaned_data.get('logo_upload'):
+            settings.logo = self.cleaned_data['logo_upload']
+        if commit:
+            settings.save()
+        return settings

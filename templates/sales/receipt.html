@@ -8,6 +8,7 @@
     <div class="receipt-paper {% if sale.is_voided %}voided{% endif %}" id="receipt">
         {% if sale.is_voided %}<div class="void-stamp">VOID</div>{% endif %}
         <div class="text-center">
+            {% if shop.logo and shop.show_logo %}<img src="{{ shop.logo }}" alt="" style="max-width:28mm;max-height:18mm;filter:grayscale(1)" class="mb-1">{% endif %}
             <div class="r-shop">{{ shop.business_name }}</div>
             <div>{{ sale.branch.name }}{% if sale.branch.location %}, {{ sale.branch.location }}{% endif %}</div>
             {% if sale.branch.phone_number or shop.phone_number %}<div>Tel: {{ sale.branch.phone_number|default:shop.phone_number }}</div>{% endif %}

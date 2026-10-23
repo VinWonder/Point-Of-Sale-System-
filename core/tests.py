@@ -91,3 +91,47 @@ class SiteSmokeTests(TestCase):
         self.assertGreater(Sale.objects.count(), 5)
         call_command('seed_demo', stdout=io.StringIO())   # second run is a no-op
         self.assertEqual(User.objects.filter(username='owner').count(), 1)
+
+
+class LogoUploadTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username='boss', password='pw-123456!', role=User.Role.OWNER)
+        self.client.force_login(self.owner)
+
+    def post(self, upload, **extra):
+        data = {'business_name': 'Jenga Hardware', 'show_logo': 'on', 'vat_rate': '16',
+                'max_cashier_discount_percent': '5', 'quotation_validity_days': '14', 'logo_upload': upload}
+        data.update(extra)
+        return self.client.post(reverse('core:settings'), data)
+
+    def png(self, size=(1200, 600)):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new('RGB', size, (0, 120, 200)).save(buffer, format='PNG')
+        return SimpleUploadedFile('logo.png', buffer.getvalue(), content_type='image/png')
+
+    def test_logo_is_resized_and_stored(self):
+        import base64
+        from PIL import Image
+        self.post(self.png())
+        logo = ShopSettings.load().logo
+        self.assertTrue(logo.startswith('data:image/png;base64,'))
+        image = Image.open(io.BytesIO(base64.b64decode(logo.split(',', 1)[1])))
+        self.assertEqual(max(image.size), 400)
+
+    def test_non_image_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        fake = SimpleUploadedFile('logo.png', b'<script>alert(1)</script>', content_type='image/png')
+        res = self.post(fake)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(ShopSettings.load().logo, '')
+
+    def test_remove_logo(self):
+        self.post(self.png())
+        self.post('', remove_logo='on')
+        self.assertEqual(ShopSettings.load().logo, '')
+
+    def test_logo_shown_in_layout(self):
+        self.post(self.png())
+        self.assertContains(self.client.get(reverse('dashboard:index')), 'data:image/png;base64,')

@@ -4,13 +4,23 @@
 {% block page_title %}Management / Shop Settings{% endblock %}
 {% block content %}
 <div class="page-header"><h3>Shop Settings</h3></div>
-<form method="post">
+<form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card">
-                <div class="card-header">Business details <span class="text-muted small fw-normal">— printed on receipts</span></div>
+                <div class="card-header">Business details <span class="text-muted small fw-normal">— printed on quotations, invoices and receipts</span></div>
                 <div class="card-body">
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="logo-preview border rounded d-grid" style="width:88px;height:88px;place-items:center;background:#fff">
+                            {% if shop.logo %}<img src="{{ shop.logo }}" alt="Logo" style="max-width:80px;max-height:80px">{% else %}<i class="bi bi-image text-muted fs-2"></i>{% endif %}
+                        </div>
+                        <div class="flex-grow-1">
+                            {{ form.logo_upload|as_crispy_field }}
+                            {% if shop.logo %}{{ form.remove_logo|as_crispy_field }}{% endif %}
+                        </div>
+                    </div>
+                    {{ form.show_logo|as_crispy_field }}
                     {{ form.business_name|as_crispy_field }}
                     {{ form.tagline|as_crispy_field }}
                     {{ form.kra_pin|as_crispy_field }}

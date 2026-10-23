@@ -12,6 +12,11 @@ class ShopSettings(models.Model):
     phone_number = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)
     address = models.CharField(max_length=255, blank=True)
+    logo = models.TextField(
+        blank=True, editable=False,
+        help_text="Logo as a data: URI. Kept in the database so it survives redeploys on hosts without disk.",
+    )
+    show_logo = models.BooleanField(default=True, help_text="Print the logo on quotations, invoices and receipts.")
     currency = models.CharField(max_length=10, default="KES")
     vat_rate = models.DecimalField(
         max_digits=5, decimal_places=2, default=Decimal("16.00"),

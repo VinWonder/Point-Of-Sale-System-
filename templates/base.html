@@ -17,7 +17,8 @@
 {% with url_name=request.resolver_match.url_name ns=request.resolver_match.namespace %}
 <aside class="sidebar d-print-none" id="sidebar">
     <a class="sidebar-brand" href="{% url 'dashboard:index' %}">
-        <span class="brand-icon"><i class="bi bi-tools"></i></span>
+        {% if shop.logo and shop.show_logo %}<span class="brand-icon bg-white"><img src="{{ shop.logo }}" alt="" style="max-width:30px;max-height:30px"></span>
+        {% else %}<span class="brand-icon"><i class="bi bi-tools"></i></span>{% endif %}
         <span class="brand-text">{{ shop.business_name }}</span>
     </a>
 
