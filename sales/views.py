@@ -213,8 +213,51 @@ def quotation_view(request, quotation_id):
     can_sell = quotation.status == Quotation.Status.DRAFT and not quotation.is_expired
     return render(request, 'sales/quotation.html', {
         'quotation': quotation, 'can_sell': can_sell,
+        'whatsapp_url': whatsapp_link(quotation, items),
         **_document_context(items, sum((i.subtotal for i in items), Decimal('0.00'))),
     })
+
+
+def whatsapp_link(quotation, items):
+    """wa.me link with the quotation as a message — how most fundis ask for prices."""
+    from urllib.parse import quote as urlquote
+
+    shop = ShopSettings.load()
+    lines = [f"*{shop.business_name}*", f"Quotation {quotation.reference} for {quotation.client_name}"]
+    if quotation.valid_until:
+        lines.append(f"Valid until {quotation.valid_until:%d/%m/%Y}")
+    lines.append('')
+    for n, item in enumerate(items, start=1):
+        lines.append(f"{n}. {item.product.name} - {item.quantity} {item.product.unit} x "
+                     f"{item.unit_price:,.0f} = {item.subtotal:,.0f}")
+    lines += ['', f"*TOTAL: KES {sum((i.subtotal for i in items), Decimal('0')):,.2f}*"]
+    if shop.phone_number:
+        lines.append(f"Call/WhatsApp: {shop.phone_number}")
+    try:
+        number = normalize_phone(quotation.client_phone) if quotation.client_phone else ''
+    except InvalidPhoneNumber:
+        number = ''
+    return f"https://wa.me/{number}?text={urlquote(chr(10).join(lines))}"
+
+
+@login_required
+@require_POST
+def quotation_requote(request, quotation_id):
+    """Copy a quotation into a new one at today's prices (prices of cement and steel move often)."""
+    original = get_object_or_404(Quotation, pk=quotation_id)
+    items = [{'product_id': i.product_id, 'qty': i.quantity}
+             for i in original.items.select_related('product') if i.product.is_active]
+    try:
+        quotation = save_quotation(
+            user=request.user, raw_items=items, customer=original.customer,
+            customer_name=original.customer_name, customer_phone=original.customer_phone,
+            notes=original.notes,
+        )
+    except SaleError as exc:
+        messages.error(request, str(exc))
+        return redirect('sales:quotation', quotation_id=original.id)
+    messages.success(request, f"{quotation.reference} created from {original.reference} at today's prices. Review and save.")
+    return redirect('sales:quotation_edit', quotation_id=quotation.id)
 
 
 @login_required

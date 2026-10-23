@@ -67,7 +67,11 @@
                     <span class="fw-bold fs-4">{{ total|money }}</span>
                 </div>
                 <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print quotation</button>
+                <a href="{{ whatsapp_url }}" target="_blank" rel="noopener" class="btn btn-outline-success"><i class="bi bi-whatsapp"></i> Send on WhatsApp</a>
                 {% if can_sell %}<a href="{% url 'sales:quotation_edit' quotation.id %}" class="btn btn-outline-secondary"><i class="bi bi-pencil"></i> Edit quotation</a>{% endif %}
+                <form method="post" action="{% url 'sales:quotation_requote' quotation.id %}" class="d-grid">
+                    {% csrf_token %}<button class="btn btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Re-quote at today's prices</button>
+                </form>
                 {% for sale in quotation.sale_set.all %}
                 <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-success"><i class="bi bi-receipt"></i> Sale {{ sale.receipt_number }}</a>
                 <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-success"><i class="bi bi-file-earmark-text"></i> A4 invoice</a>

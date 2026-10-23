@@ -512,3 +512,26 @@ class RecordSaleFromQuotationTests(SaleTestMixin, TestCase):
         q.refresh_from_db()
         self.assertEqual(q.customer.phone_number, '254733000444')
         self.assertEqual(q.customer_name, '')
+
+
+class QuotationExtrasTests(SaleTestMixin, TestCase):
+    def test_whatsapp_link_has_number_items_and_total(self):
+        from urllib.parse import unquote
+        q = Quotation.objects.create(branch=self.branch, customer_name='Akinyi', customer_phone='0722 333 444')
+        QuotationItem.objects.create(quotation=q, product=self.cement, quantity=10, unit_price=750)
+        self.client.force_login(self.cashier)
+        url = unquote(self.client.get(reverse('sales:quotation', args=[q.pk])).context['whatsapp_url'])
+        self.assertTrue(url.startswith('https://wa.me/254722333444?text='))
+        self.assertIn('Cement 50kg - 10 pcs x 750 = 7,500', url)
+        self.assertIn('*TOTAL: KES 7,500.00*', url)
+
+    def test_requote_uses_current_prices(self):
+        q = Quotation.objects.create(branch=self.branch, customer_name='Akinyi')
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=2, unit_price=120)
+        self.client.force_login(self.cashier)
+        res = self.client.post(reverse('sales:quotation_requote', args=[q.pk]))
+        new = Quotation.objects.exclude(pk=q.pk).get()
+        self.assertRedirects(res, reverse('sales:quotation_edit', args=[new.pk]))
+        self.assertEqual(new.items.get().unit_price, Decimal('150.00'))
+        self.assertEqual(new.client_name, 'Akinyi')
+        self.assertEqual(new.number, q.number + 1)
