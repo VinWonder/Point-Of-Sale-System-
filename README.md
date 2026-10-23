@@ -154,7 +154,7 @@ python manage.py stock_alerts        # print low / out-of-stock items per branch
 python manage.py test
 ```
 
-160+ tests cover checkout rules, credit limits, returns, voids, M-Pesa
+150+ tests cover checkout rules, credit limits, returns, voids, M-Pesa
 callbacks, cash-up maths, stock ledger, transfers, CSV import, report
 figures, role permissions, and a smoke test that opens every page as every
 role. GitHub Actions runs them on SQLite and PostgreSQL for every push.
