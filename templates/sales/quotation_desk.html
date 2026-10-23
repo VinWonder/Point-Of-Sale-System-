@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{% if quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endblock %}
+{% block page_title %}Quotations / {% if quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
+{% block content %}
+{{ desk_config|json_script:"desk-config" }}
+<div class="desk-layout" x-data="quoteDesk()" x-init="init()">
+
+    <!-- ================= The paper ================= -->
+    <div class="doc position-relative">
+        <div class="doc-stamp draft" x-show="!saved">DRAFT</div>
+        <div class="doc-head">
+            {% with branch=user.branch %}{% include "partials/doc_brand.html" %}{% endwith %}
+            <div class="doc-title-block">
+                <div class="doc-title">Quotation</div>
+                <div class="doc-meta">
+                    <label>No.</label><div class="doc-line" x-text="reference"></div>
+                    <label>Date:</label><div class="doc-line">{{ today|date:"d/m/Y" }}</div>
+                    <label>Valid for:</label>
+                    <select class="doc-line" x-model.number="validDays">
+                        <template x-for="d in [3, 7, 14, 21, 30, 60, 90]" :key="d">
+                            <option :value="d" x-text="d + ' days (to ' + validUntil(d) + ')'" :selected="d === validDays"></option>
+                        </template>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client details -->
+        <div class="doc-client-tab">Client Details:</div>
+        <div class="doc-client">
+            <div class="btn-group btn-group-sm mb-2 d-print-none" role="group">
+                <button type="button" class="btn" :class="mode === 'walkin' ? 'btn-dark' : 'btn-outline-dark'" @click="setMode('walkin')">Walk-in</button>
+                <button type="button" class="btn" :class="mode === 'named' ? 'btn-dark' : 'btn-outline-dark'" @click="setMode('named')">Walk-in with name</button>
+                <button type="button" class="btn" :class="mode === 'registered' ? 'btn-dark' : 'btn-outline-dark'" @click="setMode('registered')">Registered customer</button>
+            </div>
+
+            <div x-show="mode === 'walkin'" class="client-name">Walk-in customer</div>
+
+            <div x-show="mode === 'named'" class="row g-2">
+                <div class="col-sm-7"><input type="text" class="doc-input client-name" x-model="customerName" maxlength="150" placeholder="Customer name (e.g. Mzee Otieno)"></div>
+                <div class="col-sm-5"><input type="tel" class="doc-input" x-model="customerPhone" maxlength="20" placeholder="Phone (optional)"></div>
+            </div>
+
+            <div x-show="mode === 'registered'">
+                <template x-if="!customer">
+                    <div class="position-relative">
+                        <input type="text" class="doc-input" x-model="customerQuery" @input.debounce.250ms="searchCustomers()"
+                               placeholder="Type customer name or phone to search…" autocomplete="off">
+                        <div class="item-suggest" x-show="customerResults.length">
+                            <template x-for="c in customerResults" :key="c.id">
+                                <button type="button" @click="pickCustomer(c)">
+                                    <span><strong x-text="c.name"></strong> <small class="text-muted" x-text="c.phone"></small></span>
+                                    <span class="badge" :class="c.blocked ? 'bg-danger' : 'bg-light text-dark'" x-text="c.blocked ? 'Over limit' : c.type"></span>
+                                </button>
+                            </template>
+                        </div>
+                        <div class="small text-muted d-print-none mt-1" x-show="customerQuery.length > 1 && !customerResults.length && !customerLoading">
+                            No registered customer found. <a href="{% url 'customers:customer_create' %}" target="_blank">Register a new customer</a>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="customer">
+                    <div class="d-flex justify-content-between gap-2">
+                        <div>
+                            <div class="client-name" x-text="customer.name"></div>
+                            <div x-text="customer.phone"></div>
+                            <div x-show="customer.kra_pin" x-text="'KRA PIN: ' + customer.kra_pin"></div>
+                            <div x-show="customer.address" x-text="customer.address"></div>
+                        </div>
+                        <div class="text-end small d-print-none">
+                            <div>Owes <strong x-text="money(customer.balance)"></strong></div>
+                            <div>Credit left <strong x-text="money(customer.available)"></strong></div>
+                            <div class="text-danger fw-semibold" x-show="customer.blocked">Over credit limit</div>
+                            <button type="button" class="btn btn-link btn-sm p-0" @click="customer = null; customerQuery = ''">Change</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Items -->
+        <table class="doc-table">
+            <thead><tr><th>No.</th><th>Item description</th><th>Units</th><th>Price</th><th>Amount</th></tr></thead>
+            <tbody>
+                <template x-for="(row, index) in rows" :key="row.key">
+                    <tr>
+                        <td class="num" x-text="row.product_id ? index + 1 : ''"></td>
+                        <td class="item-cell">
+                            <div class="d-flex align-items-center">
+                                <input type="text" class="doc-input" x-model="row.query" autocomplete="off"
+                                       :placeholder="index === firstEmpty() ? 'Type item name or code…' : ''"
+                                       @input.debounce.200ms="searchProducts(row)" @focus="row.open = true"
+                                       @keydown.arrow-down.prevent="moveActive(row, 1)" @keydown.arrow-up.prevent="moveActive(row, -1)"
+                                       @keydown.enter.prevent="pickActive(row, index)" @keydown.escape="row.open = false"
+                                       @blur="setTimeout(() => closeRow(row), 150)" :data-row="index">
+                                <button type="button" class="row-remove" x-show="row.product_id" @click="removeRow(index)" title="Remove line"><i class="bi bi-x-lg"></i></button>
+                            </div>
+                            <div class="item-suggest" x-show="row.open && row.results.length">
+                                <template x-for="(p, i) in row.results" :key="p.id">
+                                    <button type="button" :class="{active: i === row.active}" @mousedown.prevent="pick(row, p, index)">
+                                        <span><strong x-text="p.name"></strong> <small class="text-muted" x-text="p.sku"></small></span>
+                                        <span class="text-nowrap small">
+                                            <span x-text="money(p.price)"></span>/<span x-text="p.unit"></span>
+                                            <span class="ms-1" :class="p.stock > 0 ? 'text-success' : 'text-danger'" x-text="p.stock > 0 ? p.stock + ' in stock' : 'out of stock'"></span>
+                                        </span>
+                                    </button>
+                                </template>
+                            </div>
+                        </td>
+                        <td class="units">
+                            <template x-if="row.product_id">
+                                <span class="d-inline-flex align-items-center gap-1">
+                                    <input type="number" min="1" class="doc-input" x-model.number="row.qty" @input="qtyChanged(row)" :data-qty="row.key"
+                                           @keydown.enter.prevent="focusNextEmpty()">
+                                    <small class="text-muted" x-text="row.unit"></small>
+                                </span>
+                            </template>
+                        </td>
+                        <td class="price">
+                            <template x-if="row.product_id">
+                                <input type="number" min="0" step="1" class="doc-input" :class="{negotiated: isNegotiated(row)}"
+                                       x-model="row.unit_price" @input="row.priceEdited = true" :title="priceHint(row)">
+                            </template>
+                        </td>
+                        <td class="amount" x-text="row.product_id ? amount(row).toLocaleString('en-KE', {minimumFractionDigits: 2}) : ''"></td>
+                    </tr>
+                </template>
+                <template x-for="n in fillerRows()" :key="'f' + n">
+                    <tr><td class="num"></td><td></td><td class="units"></td><td class="price"></td><td class="amount"></td></tr>
+                </template>
+            </tbody>
+            <tfoot>
+                <tr><td colspan="4" class="label">TOTAL (KES)</td><td class="amount" x-text="total().toLocaleString('en-KE', {minimumFractionDigits: 2})"></td></tr>
+            </tfoot>
+        </table>
+        <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: <span x-text="money(vat())"></span></div>
+        <div class="doc-words" x-text="words(total())"></div>
+        <input type="text" class="doc-input mt-2" x-model="notes" maxlength="255" placeholder="Notes (e.g. delivery to site, prices valid while stocks last)">
+
+        <div class="doc-foot">
+            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {{ user.get_full_name|default:user.username }}</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Customer signature / stamp</div></div>
+        </div>
+        <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
+    </div>
+
+    <!-- ================= Actions ================= -->
+    <aside class="desk-panel">
+        <div class="card">
+            <div class="card-body d-grid gap-2">
+                <div class="d-flex justify-content-between align-items-baseline">
+                    <span class="text-muted small"><span x-text="itemCount()"></span> item(s)</span>
+                    <span class="fs-4 fw-bold" x-text="money(total())"></span>
+                </div>
+                <button type="button" class="btn btn-outline-dark" @click="window.print()" :disabled="!itemCount()">
+                    <i class="bi bi-printer"></i> Print draft
+                </button>
+                <button type="button" class="btn btn-accent btn-lg" @click="save(false)" :disabled="saving || !itemCount()">
+                    <i class="bi bi-save"></i> <span x-text="initialId ? 'Save changes' : 'Save quotation'"></span>
+                </button>
+                <button type="button" class="btn btn-success" @click="save(true)" :disabled="saving || !itemCount()">
+                    <i class="bi bi-cash-coin"></i> Save &amp; record sale
+                </button>
+                <div class="alert alert-danger small mb-0" x-show="error" x-text="error"></div>
+                <p class="small text-muted mb-0">Print the draft for the customer to check, then save. Saved quotations get the next number and appear under <a href="{% url 'sales:quotation_list' %}">Quotations</a>.</p>
+                <p class="small text-muted mb-0" x-show="config.role === 'CASHIER'">You can lower a price by up to <span x-text="config.maxDiscount"></span>%. Negotiated prices show in orange.</p>
+            </div>
+        </div>
+    </aside>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'js/quote-desk.js' %}"></script>{% endblock %}

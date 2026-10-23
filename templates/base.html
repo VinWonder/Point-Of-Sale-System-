@@ -29,7 +29,8 @@
 
         <div class="nav-section">Sales</div>
         <a class="nav-link {% if url_name == 'sale_list' or url_name == 'sale_detail' or url_name == 'receipt' %}active{% endif %}" href="{% url 'sales:sale_list' %}"><i class="bi bi-receipt"></i> Sales History</a>
-        <a class="nav-link {% if 'quotation' in url_name %}active{% endif %}" href="{% url 'sales:quotation_list' %}"><i class="bi bi-file-earmark-text"></i> Quotations</a>
+        <a class="nav-link {% if url_name == 'quotation_desk' or url_name == 'quotation_edit' %}active{% endif %}" href="{% url 'sales:quotation_desk' %}"><i class="bi bi-file-earmark-plus"></i> New Quotation / Invoice</a>
+        <a class="nav-link {% if url_name == 'quotation_list' or url_name == 'quotation' %}active{% endif %}" href="{% url 'sales:quotation_list' %}"><i class="bi bi-file-earmark-text"></i> Quotations</a>
         <a class="nav-link {% if ns == 'customers' %}active{% endif %}" href="{% url 'customers:customer_list' %}"><i class="bi bi-people"></i> Customers</a>
 
         <div class="nav-section">Till</div>

@@ -1,0 +1,12 @@
+{# Company block for printed documents. Logo is optional (Shop Settings). #}
+<div class="doc-brand">
+    {% if shop.logo and shop.show_logo %}<img src="{{ shop.logo }}" alt="{{ shop.business_name }} logo">{% endif %}
+    <div class="doc-company">{{ shop.business_name }}</div>
+    <div class="doc-company-lines">
+        {% if branch %}{{ branch.name }}{% if branch.location %}, {{ branch.location }}{% endif %}<br>{% endif %}
+        {% if shop.address %}{{ shop.address }}<br>{% endif %}
+        {% if shop.phone_number or branch.phone_number %}Tel: {{ branch.phone_number|default:shop.phone_number }}{% endif %}
+        {% if shop.email %} · {{ shop.email }}{% endif %}
+        {% if shop.kra_pin %}<br>KRA PIN: {{ shop.kra_pin }}{% endif %}
+    </div>
+</div>

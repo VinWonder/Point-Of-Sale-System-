@@ -416,3 +416,26 @@ class SaveQuotationTests(SaleTestMixin, TestCase):
         }), content_type='application/json')
         self.assertEqual(res.json()['reference'], 'QT-0001')
         self.assertEqual(Quotation.objects.get().client_name, 'Mama Wanjiku')
+
+
+class QuotationDeskViewTests(SaleTestMixin, TestCase):
+    def test_new_desk_shows_next_number(self):
+        Quotation.objects.create(branch=self.branch)
+        self.client.force_login(self.cashier)
+        res = self.client.get(reverse('sales:quotation_desk'))
+        self.assertEqual(res.context['desk_config']['nextReference'], 'QT-0002')
+
+    def test_edit_desk_preloads_lines_and_walk_in(self):
+        q = Quotation.objects.create(branch=self.branch, customer_name='Mama Akinyi')
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=4, unit_price=145)
+        self.client.force_login(self.cashier)
+        initial = self.client.get(reverse('sales:quotation_edit', args=[q.pk])).context['desk_config']['initial']
+        self.assertEqual(initial['customer_name'], 'Mama Akinyi')
+        self.assertEqual(initial['items'][0]['qty'], 4)
+        self.assertEqual(initial['items'][0]['unit_price'], '145.00')
+
+    def test_converted_quotation_cannot_be_edited(self):
+        q = Quotation.objects.create(branch=self.branch, status=Quotation.Status.CONVERTED)
+        self.client.force_login(self.cashier)
+        res = self.client.get(reverse('sales:quotation_edit', args=[q.pk]))
+        self.assertRedirects(res, reverse('sales:quotation', args=[q.pk]))

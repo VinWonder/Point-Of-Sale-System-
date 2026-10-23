@@ -5,7 +5,7 @@
 {% block content %}
 <div class="page-header">
     <h3>Quotations</h3>
-    <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-plus-lg"></i> New quotation (from POS)</a>
+    <a href="{% url 'sales:quotation_desk' %}" class="btn btn-accent"><i class="bi bi-file-earmark-plus"></i> New quotation</a>
 </div>
 <form method="get" class="filter-bar row g-2 align-items-center">
     <div class="col-md-5"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="Quote #, customer name or phone"></div>

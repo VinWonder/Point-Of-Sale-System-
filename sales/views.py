@@ -8,6 +8,7 @@ from django.db.models import Count, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -328,4 +329,61 @@ def sale_return_create(request, sale_id):
             return redirect('sales:receipt', sale_id=sale.id)
     return render(request, 'sales/return_form.html', {
         'sale': sale, 'items': items, 'refund_methods': SaleReturn.RefundMethod.choices,
+    })
+
+
+@login_required
+def quotation_desk(request, quotation_id=None):
+    """
+    Paper-style editor: build a quotation line by line, print it as a draft,
+    save it (numbered QT-0001...), then record the sale when the customer pays.
+    """
+    from django.db.models import Max
+
+    quotation, initial = None, None
+    if quotation_id:
+        quotation = get_object_or_404(Quotation.objects.select_related('customer'), pk=quotation_id)
+        if quotation.status != Quotation.Status.DRAFT:
+            messages.error(request, f'{quotation.reference} is {quotation.get_status_display().lower()} and can no longer be edited.')
+            return redirect('sales:quotation', quotation_id=quotation.id)
+        customer = quotation.customer
+        initial = {
+            'id': quotation.id,
+            'reference': quotation.reference,
+            'notes': quotation.notes,
+            'valid_days': max((quotation.valid_until - timezone.localdate()).days, 1) if quotation.valid_until else None,
+            'customer': {
+                'id': customer.id, 'name': customer.name, 'phone': customer.phone_number,
+                'kra_pin': customer.kra_pin, 'address': customer.address,
+                'balance': str(customer.balance_owed), 'available': str(customer.available_credit),
+                'blocked': customer.is_defaulter,
+            } if customer else None,
+            'customer_name': quotation.customer_name,
+            'customer_phone': quotation.customer_phone,
+            'items': [
+                {'product_id': i.product_id, 'name': i.product.name, 'sku': i.product.sku, 'unit': i.product.unit,
+                 'qty': i.quantity, 'unit_price': str(i.unit_price), 'list_price': str(i.product.sell_price),
+                 'wholesale_price': str(i.product.wholesale_price) if i.product.wholesale_price else None,
+                 'wholesale_min_qty': i.product.wholesale_min_qty}
+                for i in quotation.items.select_related('product')
+            ],
+        }
+    settings = ShopSettings.load()
+    next_number = (Quotation.objects.aggregate(m=Max('number'))['m'] or 0) + 1
+    return render(request, 'sales/quotation_desk.html', {
+        'quotation': quotation,
+        'desk_config': {
+            'initial': initial,
+            'nextReference': f'QT-{next_number:04d}',
+            'validDays': settings.quotation_validity_days,
+            'maxDiscount': float(settings.max_cashier_discount_percent),
+            'role': request.user.role,
+            'vatRate': float(settings.vat_rate),
+            'urls': {
+                'products': reverse('inventory:product_search_api'),
+                'customers': reverse('customers:customer_search_api'),
+                'save': reverse('sales:create_quotation'),
+            },
+        },
+        'today': timezone.localdate(),
     })
