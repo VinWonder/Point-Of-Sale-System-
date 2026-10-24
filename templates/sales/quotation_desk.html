@@ -5,7 +5,7 @@
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
 {% block content %}
 {{ desk_config|json_script:"desk-config" }}
-<div class="desk-layout" x-data="quoteDesk()" x-init="init()">
+<div class="desk-layout" x-data="quoteDesk()" x-init="init()" data-desk-screen>
 
     <!-- ================= The paper ================= -->
     <div class="doc position-relative">

@@ -76,7 +76,7 @@
                 </div>
                 <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print receipt</button>
                 <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-dark"><i class="bi bi-file-earmark-text"></i> A4 invoice</a>
-                <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-cart-plus"></i> New sale <kbd>F2</kbd></a>
+                <a href="{% url 'sales:quotation_desk' %}" class="btn btn-accent"><i class="bi bi-file-earmark-plus"></i> New quotation <kbd>F2</kbd></a>
                 <a href="{% url 'sales:sale_list' %}" class="btn btn-outline-secondary">Sales history</a>
                 {% if sale.customer %}<a href="{% url 'customers:customer_detail' sale.customer.id %}" class="btn btn-outline-secondary">Customer statement</a>{% endif %}
             </div>

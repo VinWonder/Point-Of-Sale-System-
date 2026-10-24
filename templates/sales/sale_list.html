@@ -7,7 +7,7 @@
     <h3>Sales History</h3>
     <div class="d-flex gap-2">
         <a href="{% url 'sales:sale_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export CSV</a>
-        <a href="{% url 'sales:pos' %}" class="btn btn-accent"><i class="bi bi-cart-plus"></i> New Sale</a>
+        <a href="{% url 'sales:quotation_desk' %}" class="btn btn-accent"><i class="bi bi-file-earmark-plus"></i> New Quotation</a>
     </div>
 </div>
 
