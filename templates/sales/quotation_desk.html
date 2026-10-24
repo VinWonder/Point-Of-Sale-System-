@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}{% if quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endblock %}
-{% block page_title %}Quotations / {% if quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endblock %}
+{% block title %}{% if doc == 'invoice' %}New Invoice{% elif quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endblock %}
+{% block page_title %}{% if doc == 'invoice' %}Invoices / New Invoice{% else %}Quotations / {% if quotation %}Edit {{ quotation.reference }}{% else %}New Quotation{% endif %}{% endif %}{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
 {% block content %}
 {{ desk_config|json_script:"desk-config" }}
@@ -13,16 +13,24 @@
         <div class="doc-head">
             {% with branch=user.branch %}{% include "partials/doc_brand.html" %}{% endwith %}
             <div class="doc-title-block">
-                <div class="doc-title">Quotation</div>
+                <div class="doc-title">{% if doc == 'invoice' %}Invoice{% else %}Quotation{% endif %}</div>
                 <div class="doc-meta">
                     <label>No.</label><div class="doc-line" x-text="reference"></div>
                     <label>Date:</label><div class="doc-line">{{ today|date:"d/m/Y" }}</div>
+                    {% if doc == 'invoice' %}
+                    <label x-show="payMethod === 'CREDIT'">Due date:</label>
+                    <select class="doc-line" x-show="payMethod === 'CREDIT'" x-model.number="dueDays">
+                        <template x-for="d in [0, 7, 14, 30, 60, 90]" :key="d">
+                            <option :value="d" :selected="d === dueDays" x-text="d === 0 ? 'On receipt' : dueDate(d) + ' (' + d + ' days)'"></option>
+                        </template>
+                    </select>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
         <!-- Client details -->
-        <div class="doc-client-tab">Client Details:</div>
+        <div class="doc-client-tab">{% if doc == 'invoice' %}Bill To:{% else %}Client Details:{% endif %}</div>
         <div class="doc-client">
             <div class="btn-group btn-group-sm mb-2 d-print-none" role="group">
                 <button type="button" class="btn" :class="mode === 'walkin' ? 'btn-dark' : 'btn-outline-dark'" @click="setMode('walkin')">Walk-in</button>
@@ -131,9 +139,18 @@
         </table>
         <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: <span x-text="money(vat())"></span></div>
         <div class="doc-words" x-text="words(total())"></div>
-        <input type="text" class="doc-input mt-2" x-model="notes" maxlength="255" placeholder="Notes (e.g. delivery to site, prices valid while stocks last)">
+        <input type="text" class="doc-input mt-2" x-model="notes" maxlength="255" placeholder="{% if doc == 'invoice' %}Notes (e.g. LPO number, delivered to site by...){% else %}Notes (e.g. delivery to site, prices valid while stocks last){% endif %}">
 
+        {% if doc == 'invoice' %}
+        {% include "partials/doc_payment_details.html" %}
+        <div class="doc-foot">
+            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {{ user.get_full_name|default:user.username }}</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Received by (customer name, signature, stamp)</div></div>
+        </div>
+        <div class="doc-terms">{{ shop.invoice_terms }}</div>
+        {% else %}
         <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
+        {% endif %}
     </div>
 
     <!-- ================= Actions ================= -->
@@ -147,14 +164,41 @@
                 <button type="button" class="btn btn-outline-dark" @click="window.print()" :disabled="!itemCount()">
                     <i class="bi bi-printer"></i> Print draft
                 </button>
+                {% if doc == 'invoice' %}
+                <div>
+                    <div class="small text-muted mb-1">Payment</div>
+                    <div class="btn-group w-100" role="group">
+                        <template x-for="m in [['CASH','Cash'],['MPESA','M-Pesa'],['CARD','Card'],['CREDIT','On account']]" :key="m[0]">
+                            <button type="button" class="btn btn-sm" :class="payMethod === m[0] ? 'btn-dark' : 'btn-outline-dark'" @click="payMethod = m[0]" x-text="m[1]"></button>
+                        </template>
+                    </div>
+                </div>
+                <div x-show="payMethod === 'CASH'">
+                    <input type="number" min="0" class="form-control" x-model="tendered" placeholder="Cash received (optional)">
+                    <div class="small text-success fw-semibold mt-1" x-show="Number(tendered) >= total() && Number(tendered) > 0">Change: <span x-text="money(Number(tendered) - total())"></span></div>
+                </div>
+                <div x-show="payMethod === 'MPESA'">
+                    <input type="tel" class="form-control" x-model="mpesaPhone" placeholder="M-Pesa number e.g. 0712 345 678">
+                </div>
+                <div x-show="payMethod === 'CREDIT'" class="small" :class="mode === 'registered' && customer ? 'text-muted' : 'text-danger'">
+                    <span x-show="!(mode === 'registered' && customer)">On account needs a registered customer in Bill To.</span>
+                    <span x-show="mode === 'registered' && customer">Charged to the customer's account, due <span x-text="dueDays ? dueDate(dueDays) : 'on receipt'"></span>.</span>
+                </div>
+                <button type="button" class="btn btn-accent btn-lg" @click="issueInvoice()" :disabled="saving || !itemCount()">
+                    <i class="bi bi-file-earmark-check"></i> Issue invoice
+                </button>
+                <div class="alert alert-danger small mb-0" x-show="error" x-text="error"></div>
+                <p class="small text-muted mb-0">Issuing deducts stock and gives the next INV number. Print the draft first if the customer wants to check it.</p>
+                {% else %}
                 <button type="button" class="btn btn-accent btn-lg" @click="save(false)" :disabled="saving || !itemCount()">
                     <i class="bi bi-save"></i> <span x-text="initialId ? 'Save changes' : 'Save quotation'"></span>
                 </button>
                 <button type="button" class="btn btn-success" @click="save(true)" :disabled="saving || !itemCount()">
-                    <i class="bi bi-cash-coin"></i> Save &amp; record sale
+                    <i class="bi bi-file-earmark-check"></i> Save &amp; invoice
                 </button>
                 <div class="alert alert-danger small mb-0" x-show="error" x-text="error"></div>
                 <p class="small text-muted mb-0">Print the draft for the customer to check, then save. Saved quotations get the next number and appear under <a href="{% url 'sales:quotation_list' %}">Quotations</a>.</p>
+                {% endif %}
                 <p class="small text-muted mb-0" x-show="config.role === 'CASHIER'">You can lower a price by up to <span x-text="config.maxDiscount"></span>%. Negotiated prices show in orange.</p>
             </div>
         </div>

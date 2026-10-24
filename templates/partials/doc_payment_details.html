@@ -1,0 +1,12 @@
+{# "How to pay" box printed on invoices, from Shop Settings. #}
+{% if shop.has_payment_details %}
+<div class="doc-paybox">
+    <div class="doc-paybox-title">How to pay</div>
+    <div class="doc-paybox-grid">
+        {% if shop.mpesa_paybill %}<div><strong>M-Pesa Paybill:</strong> {{ shop.mpesa_paybill }}<br><span class="text-muted">Account: {{ shop.mpesa_paybill_account|default:"invoice number" }}</span></div>{% endif %}
+        {% if shop.mpesa_till %}<div><strong>M-Pesa Till (Buy Goods):</strong> {{ shop.mpesa_till }}</div>{% endif %}
+        {% if shop.bank_account_number %}<div><strong>Bank:</strong> {{ shop.bank_name }}{% if shop.bank_branch %}, {{ shop.bank_branch }}{% endif %}<br>
+            A/C name: {{ shop.bank_account_name|default:shop.business_name }} · A/C no: {{ shop.bank_account_number }}</div>{% endif %}
+    </div>
+</div>
+{% endif %}

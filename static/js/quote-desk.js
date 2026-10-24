@@ -47,6 +47,7 @@
             customer: null, customerQuery: '', customerResults: [], customerLoading: false,
             customerName: '', customerPhone: '',
             notes: '',
+            payMethod: 'CASH', dueDays: config.dueDays ?? 30, tendered: '', mpesaPhone: '',
             saving: false,
             error: '',
 
@@ -79,6 +80,11 @@
             // ---------- formatting ----------
             money(v) {
                 return 'KES ' + Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            },
+            dueDate(days) {
+                const d = new Date();
+                d.setDate(d.getDate() + days);
+                return d.toLocaleDateString('en-GB');
             },
             words(total) {
                 const shillings = Math.floor(total + 1e-9);
@@ -176,28 +182,53 @@
             vat() { const rate = this.config.vatRate; return this.total() * rate / (100 + rate); },
 
             // ---------- save ----------
+            clientPayload() {
+                return {
+                    customer_id: this.mode === 'registered' && this.customer ? this.customer.id : null,
+                    customer_name: this.mode === 'named' ? this.customerName : '',
+                    customer_phone: this.mode === 'named' ? this.customerPhone : '',
+                    notes: this.notes,
+                    items: this.rows.filter(r => r.product_id).map(r => ({
+                        product_id: r.product_id, qty: parseInt(r.qty, 10), unit_price: r.unit_price,
+                    })),
+                };
+            },
+            checkClient() {
+                if (this.mode === 'registered' && !this.customer) return 'Pick the registered customer, or switch to Walk-in.';
+                if (this.mode === 'named' && !this.customerName.trim()) return "Enter the customer's name, or switch to Walk-in.";
+                return '';
+            },
+            async issueInvoice() {
+                this.error = this.checkClient();
+                if (this.error) return;
+                if (this.payMethod === 'CREDIT' && !(this.mode === 'registered' && this.customer)) {
+                    this.error = 'On account needs a registered customer.'; return;
+                }
+                if (this.payMethod === 'MPESA' && !this.mpesaPhone.trim()) { this.error = 'Enter the M-Pesa number.'; return; }
+                if (!confirm('Issue this invoice? Stock will be deducted.')) return;
+                this.saving = true;
+                const res = await fetch(config.urls.invoice, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({
+                        ...this.clientPayload(), payment_method: this.payMethod, due_days: this.dueDays,
+                        cash_tendered: this.payMethod === 'CASH' ? this.tendered : null,
+                        mpesa_phone: this.payMethod === 'MPESA' ? this.mpesaPhone : '',
+                    }),
+                });
+                const data = await res.json().catch(() => ({ error: 'Unexpected server response.' }));
+                if (!res.ok) { this.error = data.error || 'Could not issue the invoice.'; this.saving = false; return; }
+                this.saved = true;
+                window.location.href = data.redirect;
+            },
             async save(thenPay) {
-                this.error = '';
-                if (this.mode === 'registered' && !this.customer) {
-                    this.error = 'Pick the registered customer, or switch to Walk-in.'; return;
-                }
-                if (this.mode === 'named' && !this.customerName.trim()) {
-                    this.error = "Enter the customer's name, or switch to Walk-in."; return;
-                }
+                this.error = this.checkClient();
+                if (this.error) return;
                 this.saving = true;
                 const res = await fetch(config.urls.save, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                    body: JSON.stringify({
-                        quotation_id: this.initialId,
-                        customer_id: this.mode === 'registered' && this.customer ? this.customer.id : null,
-                        customer_name: this.mode === 'named' ? this.customerName : '',
-                        customer_phone: this.mode === 'named' ? this.customerPhone : '',
-                        notes: this.notes,
-                        items: this.rows.filter(r => r.product_id).map(r => ({
-                            product_id: r.product_id, qty: parseInt(r.qty, 10), unit_price: r.unit_price,
-                        })),
-                    }),
+                    body: JSON.stringify({ quotation_id: this.initialId, ...this.clientPayload() }),
                 });
                 const data = await res.json().catch(() => ({ error: 'Unexpected server response.' }));
                 if (!res.ok) { this.error = data.error || 'Could not save the quotation.'; this.saving = false; return; }
