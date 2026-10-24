@@ -15,7 +15,6 @@
                 <div class="doc-meta">
                     <label>No.</label><div class="doc-line">{{ quotation.reference }}</div>
                     <label>Date:</label><div class="doc-line">{{ quotation.created_at|date:"d/m/Y" }}</div>
-                    <label>Valid for:</label><div class="doc-line">{% if quotation.valid_until %}until {{ quotation.valid_until|date:"d/m/Y" }}{% endif %}</div>
                 </div>
             </div>
         </div>
@@ -50,10 +49,6 @@
         <div class="doc-words">{{ total|in_words }}</div>
         {% if quotation.notes %}<div class="mt-2"><strong>Notes:</strong> {{ quotation.notes }}</div>{% endif %}
 
-        <div class="doc-foot">
-            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {% if quotation.created_by %}{{ quotation.created_by.get_full_name|default:quotation.created_by.username }}{% endif %}</div></div>
-            <div><div style="height:28px"></div><div class="doc-sign">Customer signature / stamp</div></div>
-        </div>
         <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
     </div>
 

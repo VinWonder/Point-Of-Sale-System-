@@ -17,12 +17,6 @@
                 <div class="doc-meta">
                     <label>No.</label><div class="doc-line" x-text="reference"></div>
                     <label>Date:</label><div class="doc-line">{{ today|date:"d/m/Y" }}</div>
-                    <label>Valid for:</label>
-                    <select class="doc-line" x-model.number="validDays">
-                        <template x-for="d in [3, 7, 14, 21, 30, 60, 90]" :key="d">
-                            <option :value="d" x-text="d + ' days (to ' + validUntil(d) + ')'" :selected="d === validDays"></option>
-                        </template>
-                    </select>
                 </div>
             </div>
         </div>
@@ -139,10 +133,6 @@
         <div class="doc-words" x-text="words(total())"></div>
         <input type="text" class="doc-input mt-2" x-model="notes" maxlength="255" placeholder="Notes (e.g. delivery to site, prices valid while stocks last)">
 
-        <div class="doc-foot">
-            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {{ user.get_full_name|default:user.username }}</div></div>
-            <div><div style="height:28px"></div><div class="doc-sign">Customer signature / stamp</div></div>
-        </div>
         <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
     </div>
 

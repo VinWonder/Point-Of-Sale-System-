@@ -224,8 +224,6 @@ def whatsapp_link(quotation, items):
 
     shop = ShopSettings.load()
     lines = [f"*{shop.business_name}*", f"Quotation {quotation.reference} for {quotation.client_name}"]
-    if quotation.valid_until:
-        lines.append(f"Valid until {quotation.valid_until:%d/%m/%Y}")
     lines.append('')
     for n, item in enumerate(items, start=1):
         lines.append(f"{n}. {item.product.name} - {item.quantity} {item.product.unit} x "
@@ -439,7 +437,6 @@ def quotation_desk(request, quotation_id=None):
             'id': quotation.id,
             'reference': quotation.reference,
             'notes': quotation.notes,
-            'valid_days': max((quotation.valid_until - timezone.localdate()).days, 1) if quotation.valid_until else None,
             'customer': {
                 'id': customer.id, 'name': customer.name, 'phone': customer.phone_number,
                 'kra_pin': customer.kra_pin, 'address': customer.address,
@@ -463,7 +460,6 @@ def quotation_desk(request, quotation_id=None):
         'desk_config': {
             'initial': initial,
             'nextReference': f'QT-{next_number:04d}',
-            'validDays': settings.quotation_validity_days,
             'maxDiscount': float(settings.max_cashier_discount_percent),
             'role': request.user.role,
             'vatRate': float(settings.vat_rate),

@@ -43,7 +43,6 @@
             initialId: null,
             reference: config.nextReference + ' (on save)',
             saved: false,
-            validDays: config.validDays,
             mode: 'walkin',
             customer: null, customerQuery: '', customerResults: [], customerLoading: false,
             customerName: '', customerPhone: '',
@@ -57,7 +56,6 @@
                     this.initialId = initial.id;
                     this.reference = initial.reference;
                     this.notes = initial.notes || '';
-                    if (initial.valid_days) this.validDays = this.nearestValidity(initial.valid_days);
                     if (initial.customer) { this.mode = 'registered'; this.customer = initial.customer; }
                     else if (initial.customer_name) {
                         this.mode = 'named'; this.customerName = initial.customer_name; this.customerPhone = initial.customer_phone;
@@ -88,14 +86,6 @@
                 let text = 'Kenya Shillings ' + numberToWords(shillings);
                 if (cents) text += ' and ' + numberToWords(cents) + ' Cents';
                 return text + ' Only';
-            },
-            validUntil(days) {
-                const d = new Date();
-                d.setDate(d.getDate() + days);
-                return d.toLocaleDateString('en-GB');
-            },
-            nearestValidity(days) {
-                return [3, 7, 14, 21, 30, 60, 90].reduce((a, b) => Math.abs(b - days) < Math.abs(a - days) ? b : a);
             },
 
             // ---------- customer ----------
@@ -203,7 +193,6 @@
                         customer_id: this.mode === 'registered' && this.customer ? this.customer.id : null,
                         customer_name: this.mode === 'named' ? this.customerName : '',
                         customer_phone: this.mode === 'named' ? this.customerPhone : '',
-                        valid_days: this.validDays,
                         notes: this.notes,
                         items: this.rows.filter(r => r.product_id).map(r => ({
                             product_id: r.product_id, qty: parseInt(r.qty, 10), unit_price: r.unit_price,
