@@ -45,9 +45,6 @@
                 <tr><td colspan="4" class="label">TOTAL (KES)</td><td class="amount">{{ total|floatformat:"2g" }}</td></tr>
             </tfoot>
         </table>
-        <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: {{ vat|money }}</div>
-        <div class="doc-words">{{ total|in_words }}</div>
-        {% if quotation.notes %}<div class="mt-2"><strong>Notes:</strong> {{ quotation.notes }}</div>{% endif %}
 
         <div class="doc-terms">This is a quotation, not a receipt. Goods are reserved only after payment. {{ shop.receipt_footer }}</div>
     </div>

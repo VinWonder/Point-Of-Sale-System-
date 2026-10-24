@@ -491,7 +491,8 @@ class RecordSaleFromQuotationTests(SaleTestMixin, TestCase):
         res = self.client.get(reverse('sales:invoice', args=[sale.pk]))
         self.assertContains(res, 'Invoice')
         self.assertContains(res, 'P051111111A')
-        self.assertContains(res, 'Kenya Shillings One Thousand Five Hundred and Sixty Only')
+        self.assertContains(res, '1,560.00')
+        self.assertNotContains(res, 'Kenya Shillings')
 
     def test_quotation_page_renders_paper(self):
         q = self.quote(customer_name='Mzee Otieno')

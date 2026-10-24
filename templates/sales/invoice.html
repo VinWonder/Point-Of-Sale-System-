@@ -60,8 +60,6 @@
                 <tr class="doc-grand"><td colspan="4" class="label">BALANCE DUE</td><td class="amount">{{ sale.balance_due|floatformat:"2g" }}</td></tr>
             </tfoot>
         </table>
-        <div class="doc-words">{{ sale.total|in_words }}</div>
-        {% if sale.notes %}<div class="mt-2"><strong>Notes:</strong> {{ sale.notes }}</div>{% endif %}
         {% if payments %}
         <div class="small mt-2"><strong>Payments received:</strong>
             {% for p in payments %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.mpesa_receipt_number %} ({{ p.mpesa_receipt_number }}){% elif p.reference %} ({{ p.reference }}){% endif %} on {{ p.created_at|date:"d/m/Y" }}{% if not forloop.last %}; {% endif %}{% endfor %}

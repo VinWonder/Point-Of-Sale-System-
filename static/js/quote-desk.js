@@ -1,28 +1,5 @@
 /* Quotation Desk (Alpine.js). The server re-checks every price and quantity on save. */
 (function () {
-    const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven',
-        'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-    function belowThousand(n) {
-        const words = [];
-        if (n >= 100) { words.push(ONES[Math.floor(n / 100)], 'Hundred'); n %= 100; if (n) words.push('and'); }
-        if (n >= 20) words.push(TENS[Math.floor(n / 10)] + (n % 10 ? '-' + ONES[n % 10] : ''));
-        else if (n) words.push(ONES[n]);
-        return words.join(' ');
-    }
-
-    // Mirrors core/words.py so the draft prints the same wording as the saved quotation.
-    function numberToWords(n) {
-        if (n === 0) return 'Zero';
-        const parts = [];
-        for (const [value, name] of [[1e9, 'Billion'], [1e6, 'Million'], [1e3, 'Thousand']]) {
-            if (n >= value) { parts.push(belowThousand(Math.floor(n / value)) + ' ' + name); n %= value; }
-        }
-        if (n) { if (parts.length && n < 100) parts.push('and'); parts.push(belowThousand(n)); }
-        return parts.join(' ');
-    }
-
     function getCookie(name) {
         const match = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
         return match ? decodeURIComponent(match[2]) : '';
@@ -86,14 +63,6 @@
                 d.setDate(d.getDate() + days);
                 return d.toLocaleDateString('en-GB');
             },
-            words(total) {
-                const shillings = Math.floor(total + 1e-9);
-                const cents = Math.round((total - shillings) * 100);
-                let text = 'Kenya Shillings ' + numberToWords(shillings);
-                if (cents) text += ' and ' + numberToWords(cents) + ' Cents';
-                return text + ' Only';
-            },
-
             // ---------- customer ----------
             setMode(mode) { this.mode = mode; this.error = ''; },
             async searchCustomers() {
@@ -179,7 +148,6 @@
             },
             amount(row) { return (Number(row.qty) || 0) * (Number(row.unit_price) || 0); },
             total() { return this.rows.reduce((sum, r) => sum + (r.product_id ? this.amount(r) : 0), 0); },
-            vat() { const rate = this.config.vatRate; return this.total() * rate / (100 + rate); },
 
             // ---------- save ----------
             clientPayload() {
