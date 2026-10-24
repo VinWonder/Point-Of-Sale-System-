@@ -31,11 +31,15 @@ Chart.js · Safaricom M-Pesa (Daraja STK Push)
   units, price and amount. Prices can be negotiated within your role's
   limits, and the total is written in words.
 - **Print before payment** – print the draft for the customer to check, save
-  it, then **Record sale** with cash (change shown), M-Pesa, card or credit.
-  Walk-ins can be registered from the quotation for credit. Quotations can
-  be edited, re-quoted at today's prices, and sent on **WhatsApp**.
-- **A4 invoices** – every sale also prints as an Invoice / Cash Sale in the
-  same layout, with payments and balance due.
+  it, then **convert it to an invoice** paid by cash (change shown), M-Pesa,
+  card or on account. Walk-ins can be registered from the quotation for
+  credit. Quotations can be edited, re-quoted at today's prices, and sent
+  on **WhatsApp**.
+- **Invoices** – a separate, standard invoice (INV-0001, INV-0002…) with due
+  date, Bill To, amount before VAT, VAT, total, paid and balance due, amount
+  in words, your Paybill / Till / bank details, and Prepared by / Received
+  by signatures. Issue one from the **Invoice Desk**, from a quotation, or
+  for any till sale. The Invoices list shows what is outstanding and overdue.
 - **Receipts** – 80 mm thermal layout with KRA PIN, VAT breakdown, payments,
   change and balance due; prints automatically after each sale.
 - **Returns & refunds** – restock (or write off damaged goods), refund in cash,
@@ -43,7 +47,7 @@ Chart.js · Safaricom M-Pesa (Daraja STK Push)
   proportionally so they aren't refunded twice.
 - **Voids** – managers cancel mistaken sales; stock goes back and credit
   charges are reversed.
-- Keyboard shortcuts: **F2** new sale, **F3** search, **F4** complete sale.
+- Keyboard shortcuts: **F2** new quotation, **Ctrl+K** search; on the POS **F3** search, **F4** complete sale.
 
 ### Customers & credit
 - Retail, contractor (fundi) and company customers with KRA PIN.
@@ -73,10 +77,13 @@ Chart.js · Safaricom M-Pesa (Daraja STK Push)
 - Optional rule: cashiers must open a shift before selling.
 
 ### Insight
-- **Dashboard** – today's revenue and gross profit, growth vs yesterday and
-  last month, net profit after expenses, customer debt, low stock, payment
-  mix, top products, branch comparison and open tills. Profit figures are
-  hidden from cashiers.
+- **Dashboard** – quick-action tiles (New Quotation is **F2**), today's
+  revenue, money collected by method, gross profit, money owed, a
+  **Needs attention** list (overdue invoices, expiring quotes, low stock,
+  blocked customers, open tills), quote-to-invoice conversion, a 7/14/30-day
+  revenue chart and recent activity. Profit figures are hidden from cashiers.
+- **Ctrl+K quick search** – jump to any page, product, customer or
+  QT/INV/receipt number from anywhere.
 - **Reports** – Profit & Loss, product sales (with category breakdown), staff
   performance (voids, discounts, cash-up variances), debt aging
   (0–30/31–60/61–90/90+ days), reorder list with suggested quantities from
