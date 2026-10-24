@@ -77,11 +77,15 @@ Chart.js · Safaricom M-Pesa (Daraja STK Push)
 - Optional rule: cashiers must open a shift before selling.
 
 ### Insight
-- **Dashboard** – quick-action tiles (New Quotation is **F2**), today's
-  revenue, money collected by method, gross profit, money owed, a
-  **Needs attention** list (overdue invoices, expiring quotes, low stock,
-  blocked customers, open tills), quote-to-invoice conversion, a 7/14/30-day
-  revenue chart and recent activity. Profit figures are hidden from cashiers.
+- **Dashboard** – switch between Today, 7 days, 30 days and This month:
+  revenue, money collected, transactions and gross profit, each compared
+  with the previous period and with a trend line; revenue chart against
+  yesterday / the previous period (hour by hour for today); a **monthly
+  target** ring with month-end pace; how customers paid; busiest hours;
+  sales by category; stock health; quotes → invoices; a **Needs attention**
+  list (overdue invoices, expiring quotes, low stock, blocked customers,
+  open tills); branch and staff leaderboards; profit snapshot and recent
+  activity. Refreshes itself every 2 minutes. Cashiers never see profit.
 - **Ctrl+K quick search** – jump to any page, product, customer or
   QT/INV/receipt number from anywhere.
 - **Reports** – Profit & Loss, product sales (with category breakdown), staff
@@ -124,6 +128,11 @@ Open <http://127.0.0.1:8000/> and log in.
 | `cashier2` | Cashier | Westlands Branch |
 
 All demo passwords are `ChangeMe123!` — **change them before real use.**
+**Showing the system to a client?** Run `python manage.py seed_demo` on a
+fresh database: it fills a month of realistic sales, quotations, invoices,
+debts and expenses so every part of the dashboard has something to show.
+Set a monthly target in Shop Settings to light up the target ring.
+
 To start from scratch instead, skip `seed_demo` and run
 `python manage.py createsuperuser`, then set the user's role to Owner in
 `/admin/`. Company name, **logo** (optional), KRA PIN, address, VAT rate and receipt
@@ -161,7 +170,7 @@ python manage.py stock_alerts        # print low / out-of-stock items per branch
 python manage.py test
 ```
 
-150+ tests cover checkout rules, credit limits, returns, voids, M-Pesa
+180+ tests cover checkout rules, credit limits, returns, voids, M-Pesa
 callbacks, cash-up maths, stock ledger, transfers, CSV import, report
 figures, role permissions, and a smoke test that opens every page as every
 role. GitHub Actions runs them on SQLite and PostgreSQL for every push.
