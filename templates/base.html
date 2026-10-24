@@ -22,46 +22,52 @@
         <span class="brand-text">{{ shop.business_name }}</span>
     </a>
 
-    <a href="{% url 'sales:quotation_desk' %}" class="btn btn-accent w-100 mb-3"><i class="bi bi-file-earmark-plus"></i> New Quotation <kbd class="ms-1">F2</kbd></a>
+    <a href="{% url 'sales:quotation_desk' %}" class="btn btn-accent w-100 mb-3 sidebar-cta"><i class="bi bi-file-earmark-plus"></i> New Quotation <kbd class="ms-auto">F2</kbd></a>
 
     <nav class="sidebar-nav">
         <a class="nav-link {% if ns == 'dashboard' %}active{% endif %}" href="{% url 'dashboard:index' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
 
-        <div class="nav-section">Sales</div>
-        <a class="nav-link {% if url_name == 'sale_list' or url_name == 'sale_detail' or url_name == 'receipt' %}active{% endif %}" href="{% url 'sales:sale_list' %}"><i class="bi bi-receipt"></i> Sales History</a>
+        <div class="nav-section">Sell</div>
         <a class="nav-link {% if url_name == 'quotation_desk' or url_name == 'quotation_edit' %}active{% endif %}" href="{% url 'sales:quotation_desk' %}"><i class="bi bi-file-earmark-plus"></i> New Quotation</a>
         <a class="nav-link {% if url_name == 'invoice_desk' %}active{% endif %}" href="{% url 'sales:invoice_desk' %}"><i class="bi bi-file-earmark-ruled"></i> New Invoice</a>
-        <a class="nav-link {% if url_name == 'invoice_list' or url_name == 'invoice' %}active{% endif %}" href="{% url 'sales:invoice_list' %}"><i class="bi bi-journal-check"></i> Invoices</a>
         <a class="nav-link {% if url_name == 'pos' %}active{% endif %}" href="{% url 'sales:pos' %}"><i class="bi bi-upc-scan"></i> Quick sale (POS)</a>
+
+        <div class="nav-section">Documents</div>
         <a class="nav-link {% if url_name == 'quotation_list' or url_name == 'quotation' %}active{% endif %}" href="{% url 'sales:quotation_list' %}"><i class="bi bi-file-earmark-text"></i> Quotations</a>
+        <a class="nav-link {% if url_name == 'invoice_list' or url_name == 'invoice' %}active{% endif %}" href="{% url 'sales:invoice_list' %}"><i class="bi bi-journal-check"></i> Invoices</a>
+        <a class="nav-link {% if url_name == 'sale_list' or url_name == 'receipt' or url_name == 'sale_return' %}active{% endif %}" href="{% url 'sales:sale_list' %}"><i class="bi bi-receipt"></i> Sales History</a>
         <a class="nav-link {% if ns == 'customers' %}active{% endif %}" href="{% url 'customers:customer_list' %}"><i class="bi bi-people"></i> Customers</a>
 
         <div class="nav-section">Till</div>
         <a class="nav-link {% if ns == 'registers' and 'shift' in url_name %}active{% endif %}" href="{% url 'registers:my_shift' %}"><i class="bi bi-cash-coin"></i> My Shift</a>
         <a class="nav-link {% if url_name == 'expense_list' %}active{% endif %}" href="{% url 'registers:expense_list' %}"><i class="bi bi-wallet2"></i> Expenses</a>
 
-        <div class="nav-section">Stock</div>
-        <a class="nav-link {% if ns == 'inventory' and url_name == 'product_list' %}active{% endif %}" href="{% url 'inventory:product_list' %}"><i class="bi bi-box-seam"></i> Products</a>
-        <a class="nav-link {% if url_name == 'stock_list' %}active{% endif %}" href="{% url 'inventory:stock_list' %}"><i class="bi bi-boxes"></i> Stock Levels</a>
-        <a class="nav-link {% if 'transfer' in url_name %}active{% endif %}" href="{% url 'branches:transfer_list' %}"><i class="bi bi-truck"></i> Transfers</a>
-        {% if user.role != 'CASHIER' %}
-        <a class="nav-link {% if url_name == 'supplier_purchase_create' or url_name == 'purchase_list' %}active{% endif %}" href="{% url 'inventory:purchase_list' %}"><i class="bi bi-bag-plus"></i> Deliveries</a>
-        <a class="nav-link {% if 'supplier' in url_name and url_name != 'supplier_purchase_create' %}active{% endif %}" href="{% url 'inventory:supplier_list' %}"><i class="bi bi-building"></i> Suppliers</a>
-        <a class="nav-link {% if url_name == 'category_list' %}active{% endif %}" href="{% url 'inventory:category_list' %}"><i class="bi bi-tags"></i> Categories</a>
-        {% endif %}
+        <details class="nav-group" {% if ns == 'inventory' or 'transfer' in url_name %}open{% endif %}>
+            <summary class="nav-section">Stock <i class="bi bi-chevron-down"></i></summary>
+            <a class="nav-link {% if ns == 'inventory' and url_name == 'product_list' or url_name == 'product_detail' %}active{% endif %}" href="{% url 'inventory:product_list' %}"><i class="bi bi-box-seam"></i> Products</a>
+            <a class="nav-link {% if url_name == 'stock_list' or url_name == 'stock_adjust' %}active{% endif %}" href="{% url 'inventory:stock_list' %}"><i class="bi bi-boxes"></i> Stock Levels</a>
+            <a class="nav-link {% if 'transfer' in url_name %}active{% endif %}" href="{% url 'branches:transfer_list' %}"><i class="bi bi-truck"></i> Transfers</a>
+            {% if user.role != 'CASHIER' %}
+            <a class="nav-link {% if url_name == 'supplier_purchase_create' or url_name == 'purchase_list' %}active{% endif %}" href="{% url 'inventory:purchase_list' %}"><i class="bi bi-bag-plus"></i> Deliveries</a>
+            <a class="nav-link {% if 'supplier' in url_name and url_name != 'supplier_purchase_create' %}active{% endif %}" href="{% url 'inventory:supplier_list' %}"><i class="bi bi-building"></i> Suppliers</a>
+            <a class="nav-link {% if url_name == 'category_list' %}active{% endif %}" href="{% url 'inventory:category_list' %}"><i class="bi bi-tags"></i> Categories</a>
+            {% endif %}
+        </details>
 
         {% if user.role != 'CASHIER' %}
-        <div class="nav-section">Management</div>
-        <a class="nav-link {% if ns == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}"><i class="bi bi-bar-chart-line"></i> Reports</a>
-        <a class="nav-link {% if ns == 'branches' and 'branch' in url_name %}active{% endif %}" href="{% url 'branches:branch_list' %}"><i class="bi bi-shop-window"></i> Branches</a>
-        <a class="nav-link {% if ns == 'accounts' and url_name != 'audit_log' %}active{% endif %}" href="{% url 'accounts:staff_list' %}"><i class="bi bi-person-badge"></i> Staff</a>
-        {% endif %}
-        {% if user.role == 'OWNER' %}
-        <a class="nav-link {% if ns == 'core' %}active{% endif %}" href="{% url 'core:settings' %}"><i class="bi bi-sliders2"></i> Shop Settings</a>
-        <a class="nav-link {% if url_name == 'audit_log' %}active{% endif %}" href="{% url 'accounts:audit_log' %}"><i class="bi bi-shield-check"></i> Audit Log</a>
-        {% endif %}
-        {% if user.is_superuser %}
-        <a class="nav-link" href="/admin/"><i class="bi bi-gear"></i> Admin</a>
+        <details class="nav-group" {% if ns == 'reports' or ns == 'core' or ns == 'accounts' or ns == 'branches' and 'transfer' not in url_name %}open{% endif %}>
+            <summary class="nav-section">Management <i class="bi bi-chevron-down"></i></summary>
+            <a class="nav-link {% if ns == 'reports' %}active{% endif %}" href="{% url 'reports:index' %}"><i class="bi bi-bar-chart-line"></i> Reports</a>
+            <a class="nav-link {% if ns == 'branches' and 'branch' in url_name %}active{% endif %}" href="{% url 'branches:branch_list' %}"><i class="bi bi-shop-window"></i> Branches</a>
+            <a class="nav-link {% if ns == 'accounts' and url_name != 'audit_log' and url_name != 'change_password' %}active{% endif %}" href="{% url 'accounts:staff_list' %}"><i class="bi bi-person-badge"></i> Staff</a>
+            {% if user.role == 'OWNER' %}
+            <a class="nav-link {% if ns == 'core' %}active{% endif %}" href="{% url 'core:settings' %}"><i class="bi bi-sliders2"></i> Shop Settings</a>
+            <a class="nav-link {% if url_name == 'audit_log' %}active{% endif %}" href="{% url 'accounts:audit_log' %}"><i class="bi bi-shield-check"></i> Audit Log</a>
+            {% endif %}
+            {% if user.is_superuser %}
+            <a class="nav-link" href="/admin/"><i class="bi bi-gear"></i> Admin</a>
+            {% endif %}
+        </details>
         {% endif %}
     </nav>
 </aside>
@@ -72,7 +78,10 @@
         <i class="bi bi-list fs-3"></i>
     </button>
     <div class="topbar-title">{% block page_title %}{% endblock %}</div>
-    <div class="ms-auto d-flex align-items-center gap-3">
+    <button type="button" class="topbar-search ms-auto" onclick="window.dispatchEvent(new CustomEvent('open-palette'))">
+        <i class="bi bi-search"></i><span class="d-none d-md-inline">Search products, customers, pages…</span><kbd>Ctrl K</kbd>
+    </button>
+    <div class="d-flex align-items-center gap-3 ms-3">
         {% if user.branch %}<span class="badge rounded-pill text-bg-light border"><i class="bi bi-geo-alt"></i> {{ user.branch.name }}</span>{% endif %}
         <div class="dropdown">
             <a class="d-flex align-items-center gap-2 text-decoration-none text-dark dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -109,6 +118,28 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 {% if user.is_authenticated %}
+<!-- Ctrl+K quick search -->
+<div class="palette-backdrop d-print-none" x-data="commandPalette('{% url 'inventory:product_search_api' %}', '{% url 'customers:customer_search_api' %}')"
+     x-show="open" x-cloak @keydown.escape.window="close()" @open-palette.window="show()" @click.self="close()">
+    <div class="palette" role="dialog" aria-label="Quick search">
+        <div class="palette-input"><i class="bi bi-search"></i>
+            <input type="text" x-ref="input" x-model="q" @input.debounce.200ms="search()" placeholder="Type a product, customer, page, or QT-/INV- number"
+                   @keydown.arrow-down.prevent="move(1)" @keydown.arrow-up.prevent="move(-1)" @keydown.enter.prevent="go()">
+            <kbd>Esc</kbd>
+        </div>
+        <div class="palette-results">
+            <template x-for="(r, i) in results" :key="r.url + i">
+                <a :href="r.url" class="palette-item" :class="{active: i === active}" @mouseenter="active = i">
+                    <i class="bi" :class="r.icon"></i>
+                    <span class="flex-grow-1 min-w-0"><span class="d-block text-truncate" x-text="r.title"></span><small class="text-muted" x-text="r.hint"></small></span>
+                    <span class="palette-kind" x-text="r.kind"></span>
+                </a>
+            </template>
+            <div class="palette-empty" x-show="!results.length" x-text="q ? 'Nothing found for “' + q + '”' : 'Start typing to search'"></div>
+        </div>
+    </div>
+</div>
+<script src="{% static 'js/palette.js' %}"></script>
 <script>
 // F2 anywhere opens a new quotation — how most sales start at the counter.
 document.addEventListener('keydown', function (e) {
