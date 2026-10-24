@@ -69,7 +69,7 @@
                 </form>
                 {% for sale in quotation.sale_set.all %}
                 <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-success"><i class="bi bi-receipt"></i> Sale {{ sale.receipt_number }}</a>
-                <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-success"><i class="bi bi-file-earmark-text"></i> A4 invoice</a>
+                <a href="{% url 'sales:invoice' sale.id %}" class="btn btn-outline-success"><i class="bi bi-file-earmark-text"></i> Invoice {{ sale.invoice_reference }}</a>
                 {% endfor %}
                 <a href="{% url 'sales:quotation_desk' %}" class="btn btn-link">New quotation</a>
             </div>
@@ -77,9 +77,9 @@
 
         {% if can_sell %}
         <div class="card border-success" id="pay" x-data="{ method: 'CASH', tendered: '' }">
-            <div class="card-header bg-success-subtle"><i class="bi bi-cash-coin"></i> Record sale</div>
+            <div class="card-header bg-success-subtle"><i class="bi bi-file-earmark-check"></i> Convert to invoice</div>
             <div class="card-body">
-                <p class="small text-muted">Customer accepted the quotation? Choose how they are paying. Stock is checked and deducted now.</p>
+                <p class="small text-muted">Customer accepted? Issue the invoice at the quoted prices. Stock is checked and deducted now.</p>
                 <form method="post" action="{% url 'sales:convert_quotation' quotation.id %}">
                     {% csrf_token %}
                     <div class="btn-group w-100 mb-2" role="group">
@@ -108,6 +108,10 @@
                             <div class="text-danger fw-semibold">{{ quotation.customer.name }} is over their credit limit — collect payment first.</div>
                             {% else %}
                             <div>Charge to <strong>{{ quotation.customer.name }}</strong>'s account.</div>
+                            <label class="form-label small mt-2 mb-1">Payment due</label>
+                            <select name="due_days" class="form-select form-select-sm">
+                                {% for d in due_options %}<option value="{{ d }}" {% if d == shop.invoice_due_days %}selected{% endif %}>{% if d == 0 %}On receipt{% else %}In {{ d }} days{% endif %}</option>{% endfor %}
+                            </select>
                             <div>Credit available: <strong>{{ quotation.customer.available_credit|money }}</strong>
                                 {% if quotation.customer.available_credit < total %}<span class="text-danger">— not enough for this quotation</span>{% endif %}</div>
                             {% endif %}
@@ -118,8 +122,8 @@
                         {% endif %}
                     </div>
 
-                    <button class="btn btn-success w-100 mt-3" onclick="return confirm('Record this sale and deduct stock?');">
-                        <i class="bi bi-check2-circle"></i> Record sale — {{ total|money }}
+                    <button class="btn btn-success w-100 mt-3" onclick="return confirm('Issue the invoice and deduct stock?');">
+                        <i class="bi bi-file-earmark-check"></i> Issue invoice — {{ total|money }}
                     </button>
                 </form>
             </div>

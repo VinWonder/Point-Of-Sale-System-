@@ -30,6 +30,8 @@
         <div class="nav-section">Sales</div>
         <a class="nav-link {% if url_name == 'sale_list' or url_name == 'sale_detail' or url_name == 'receipt' %}active{% endif %}" href="{% url 'sales:sale_list' %}"><i class="bi bi-receipt"></i> Sales History</a>
         <a class="nav-link {% if url_name == 'quotation_desk' or url_name == 'quotation_edit' %}active{% endif %}" href="{% url 'sales:quotation_desk' %}"><i class="bi bi-file-earmark-plus"></i> New Quotation</a>
+        <a class="nav-link {% if url_name == 'invoice_desk' %}active{% endif %}" href="{% url 'sales:invoice_desk' %}"><i class="bi bi-file-earmark-ruled"></i> New Invoice</a>
+        <a class="nav-link {% if url_name == 'invoice_list' or url_name == 'invoice' %}active{% endif %}" href="{% url 'sales:invoice_list' %}"><i class="bi bi-journal-check"></i> Invoices</a>
         <a class="nav-link {% if url_name == 'pos' %}active{% endif %}" href="{% url 'sales:pos' %}"><i class="bi bi-upc-scan"></i> Quick sale (POS)</a>
         <a class="nav-link {% if url_name == 'quotation_list' or url_name == 'quotation' %}active{% endif %}" href="{% url 'sales:quotation_list' %}"><i class="bi bi-file-earmark-text"></i> Quotations</a>
         <a class="nav-link {% if ns == 'customers' %}active{% endif %}" href="{% url 'customers:customer_list' %}"><i class="bi bi-people"></i> Customers</a>

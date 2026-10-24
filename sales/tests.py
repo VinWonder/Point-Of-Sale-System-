@@ -603,3 +603,76 @@ class InvoiceServiceTests(SaleTestMixin, TestCase):
         first = issue_invoice(sale)
         again = issue_invoice(sale)
         self.assertEqual(first.invoice_number, again.invoice_number)
+
+
+class InvoiceViewTests(SaleTestMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.customer = Customer.objects.create(name='Otieno Builders', phone_number='254711000222',
+                                                credit_limit=20000, kra_pin='P051234567Q')
+        self.client.force_login(self.cashier)
+
+    def post_invoice(self, **data):
+        payload = {'items': [{'product_id': self.cement.pk, 'qty': 3}], 'payment_method': 'CREDIT',
+                   'customer_id': self.customer.pk, 'due_days': 14}
+        payload.update(data)
+        return self.client.post(reverse('sales:create_invoice'), json.dumps(payload),
+                                content_type='application/json')
+
+    def test_issue_from_desk_endpoint(self):
+        res = self.post_invoice()
+        self.assertEqual(res.json()['reference'], 'INV-0001')
+        page = self.client.get(res.json()['redirect'])
+        self.assertContains(page, 'Bill To')
+        self.assertContains(page, 'P051234567Q')
+        self.assertContains(page, 'Received by')
+        self.assertContains(page, 'BALANCE DUE')
+
+    def test_mpesa_invoice_redirects_to_receipt_prompt(self):
+        res = self.post_invoice(payment_method='MPESA', customer_id=None, customer_name='Akinyi',
+                                mpesa_phone='0712 345 678')
+        self.assertIn('?mpesa=254712345678', res.json()['redirect'])
+
+    def test_bad_mpesa_phone_rejected(self):
+        res = self.post_invoice(payment_method='MPESA', mpesa_phone='12')
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(Sale.objects.exists())
+
+    def test_quotation_conversion_issues_invoice(self):
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier, customer=self.customer)
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=2, unit_price=150)
+        res = self.client.post(reverse('sales:convert_quotation', args=[q.pk]),
+                               {'payment_method': 'CREDIT', 'due_days': '7'})
+        sale = Sale.objects.get()
+        self.assertRedirects(res, reverse('sales:invoice', args=[sale.pk]))
+        self.assertEqual(sale.invoice_reference, 'INV-0001')
+        self.assertContains(self.client.get(reverse('sales:invoice', args=[sale.pk])), q.reference)
+
+    def test_issue_number_for_till_sale(self):
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 1}])
+        page = self.client.get(reverse('sales:invoice', args=[sale.pk]))
+        self.assertContains(page, 'Cash Sale')
+        self.client.post(reverse('sales:issue_invoice', args=[sale.pk]))
+        sale.refresh_from_db()
+        self.assertEqual(sale.invoice_reference, 'INV-0001')
+
+    def test_invoice_list_filters(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.post_invoice()
+        late = Sale.objects.get()
+        Sale.objects.filter(pk=late.pk).update(due_date=timezone.localdate() - timedelta(days=3))
+        self.post_invoice(payment_method='CASH', customer_id=None)
+        res = self.client.get(reverse('sales:invoice_list'), {'status': 'overdue'})
+        self.assertEqual([s.pk for s in res.context['page_obj']], [late.pk])
+        self.assertEqual(res.context['overdue_total'], Decimal('2400.00'))
+        paid = self.client.get(reverse('sales:invoice_list'), {'status': 'paid'})
+        self.assertEqual(len(paid.context['page_obj']), 1)
+
+    def test_quotation_has_no_validity_or_signatures(self):
+        q = Quotation.objects.create(branch=self.branch, created_by=self.cashier)
+        QuotationItem.objects.create(quotation=q, product=self.nails, quantity=1, unit_price=150)
+        page = self.client.get(reverse('sales:quotation', args=[q.pk]))
+        self.assertNotContains(page, 'Valid for')
+        self.assertNotContains(page, 'Customer signature')
+        self.assertContains(page, 'This is a quotation, not a receipt')

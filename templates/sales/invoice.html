@@ -1,26 +1,30 @@
 {% extends "base.html" %}
 {% load pos_tags static %}
-{% block title %}Invoice {{ sale.receipt_number }}{% endblock %}
-{% block page_title %}Sales / Invoice {{ sale.receipt_number }}{% endblock %}
+{% block title %}{% if sale.invoice_number %}Invoice {{ sale.invoice_reference }}{% else %}Sale {{ sale.receipt_number }}{% endif %}{% endblock %}
+{% block page_title %}Invoices / {% if sale.invoice_number %}{{ sale.invoice_reference }}{% else %}{{ sale.receipt_number }}{% endif %}{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/document.css' %}">{% endblock %}
 {% block content %}
 <div class="desk-layout">
     <div class="doc position-relative">
         {% if sale.is_voided %}<div class="doc-stamp void">VOID</div>
-        {% elif sale.payment_status == 'PAID' %}<div class="doc-stamp paid">PAID</div>{% endif %}
+        {% elif sale.payment_status == 'PAID' %}<div class="doc-stamp paid">PAID</div>
+        {% elif sale.is_overdue %}<div class="doc-stamp void">OVERDUE</div>{% endif %}
+
         <div class="doc-head">
             {% with branch=sale.branch %}{% include "partials/doc_brand.html" %}{% endwith %}
             <div class="doc-title-block">
-                <div class="doc-title">{% if sale.sale_type == 'CREDIT' %}Invoice{% else %}Cash Sale{% endif %}</div>
+                <div class="doc-title">{% if sale.invoice_number %}Invoice{% else %}Cash Sale{% endif %}</div>
                 <div class="doc-meta">
-                    <label>No.</label><div class="doc-line">{{ sale.receipt_number }}</div>
+                    <label>No.</label><div class="doc-line">{% if sale.invoice_number %}{{ sale.invoice_reference }}{% else %}{{ sale.receipt_number }}{% endif %}</div>
                     <label>Date:</label><div class="doc-line">{{ sale.created_at|date:"d/m/Y" }}</div>
-                    {% if sale.quotation %}<label>Quotation:</label><div class="doc-line">{{ sale.quotation.reference }}</div>{% endif %}
+                    {% if sale.due_date %}<label>Due date:</label><div class="doc-line">{% if sale.due_date == sale.created_at.date %}On receipt{% else %}{{ sale.due_date|date:"d/m/Y" }}{% endif %}</div>{% endif %}
+                    {% if sale.quotation %}<label>Our quote:</label><div class="doc-line">{{ sale.quotation.reference }}</div>{% endif %}
+                    <label>Receipt:</label><div class="doc-line">{{ sale.receipt_number }}</div>
                 </div>
             </div>
         </div>
 
-        <div class="doc-client-tab">Client Details:</div>
+        <div class="doc-client-tab">Bill To:</div>
         <div class="doc-client">
             <div class="client-name">{{ sale.client_name }}</div>
             {% if sale.customer %}
@@ -47,36 +51,54 @@
             <tfoot>
                 {% if sale.discount_amount %}
                 <tr><td colspan="4" class="label">Sub-total</td><td class="amount">{{ sale.subtotal|floatformat:"2g" }}</td></tr>
-                <tr><td colspan="4" class="label">Discount</td><td class="amount">-{{ sale.discount_amount|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Less discount</td><td class="amount">-{{ sale.discount_amount|floatformat:"2g" }}</td></tr>
                 {% endif %}
-                <tr><td colspan="4" class="label">TOTAL (KES)</td><td class="amount">{{ sale.total|floatformat:"2g" }}</td></tr>
-                <tr><td colspan="4" class="label">Paid</td><td class="amount">{{ sale.amount_paid|floatformat:"2g" }}</td></tr>
-                <tr><td colspan="4" class="label">Balance due</td><td class="amount">{{ sale.balance_due|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Amount before VAT</td><td class="amount">{{ net_of_vat|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">VAT {{ shop.vat_rate|floatformat:0 }}%</td><td class="amount">{{ sale.tax_amount|floatformat:"2g" }}</td></tr>
+                <tr class="doc-grand"><td colspan="4" class="label">TOTAL (KES)</td><td class="amount">{{ sale.total|floatformat:"2g" }}</td></tr>
+                <tr><td colspan="4" class="label">Amount paid</td><td class="amount">{{ sale.amount_paid|floatformat:"2g" }}</td></tr>
+                <tr class="doc-grand"><td colspan="4" class="label">BALANCE DUE</td><td class="amount">{{ sale.balance_due|floatformat:"2g" }}</td></tr>
             </tfoot>
         </table>
-        <div class="small text-muted mt-1">Prices are VAT inclusive. VAT ({{ shop.vat_rate|floatformat:0 }}%) included: {{ sale.tax_amount|money }}</div>
         <div class="doc-words">{{ sale.total|in_words }}</div>
+        {% if sale.notes %}<div class="mt-2"><strong>Notes:</strong> {{ sale.notes }}</div>{% endif %}
         {% if payments %}
-        <div class="small mt-2"><strong>Payments:</strong>
+        <div class="small mt-2"><strong>Payments received:</strong>
             {% for p in payments %}{{ p.get_method_display }} {{ p.amount|money }}{% if p.mpesa_receipt_number %} ({{ p.mpesa_receipt_number }}){% elif p.reference %} ({{ p.reference }}){% endif %} on {{ p.created_at|date:"d/m/Y" }}{% if not forloop.last %}; {% endif %}{% endfor %}
         </div>
         {% endif %}
-        {% if sale.sale_type == 'CREDIT' and sale.balance_due > 0 %}
-        <div class="small mt-1"><strong>Terms:</strong> Payable to {{ shop.business_name }}. Quote {{ sale.receipt_number }} when paying.</div>
-        {% endif %}
+
+        {% if sale.balance_due > 0 %}{% include "partials/doc_payment_details.html" %}{% endif %}
 
         <div class="doc-foot">
-            <div><div style="height:28px"></div><div class="doc-sign">Served by: {% if sale.served_by %}{{ sale.served_by.get_full_name|default:sale.served_by.username }}{% endif %}</div></div>
-            <div><div style="height:28px"></div><div class="doc-sign">Received by (name, signature, stamp)</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Prepared by: {% if sale.served_by %}{{ sale.served_by.get_full_name|default:sale.served_by.username }}{% endif %}</div></div>
+            <div><div style="height:28px"></div><div class="doc-sign">Received by (customer name, signature, stamp)</div></div>
         </div>
-        <div class="doc-terms">{{ shop.receipt_footer }}</div>
+        <div class="doc-terms">{{ shop.invoice_terms }}{% if shop.kra_pin %} · Seller KRA PIN {{ shop.kra_pin }}{% endif %}</div>
     </div>
 
     <aside class="desk-panel d-print-none">
         <div class="card"><div class="card-body d-grid gap-2">
+            <div class="d-flex justify-content-between align-items-center">
+                {% if sale.is_voided %}<span class="badge bg-secondary fs-6">Void</span>
+                {% elif sale.payment_status == 'PAID' %}<span class="badge bg-success fs-6">Paid</span>
+                {% elif sale.is_overdue %}<span class="badge bg-danger fs-6">Overdue</span>
+                {% else %}<span class="badge bg-warning text-dark fs-6">{{ sale.get_payment_status_display }}</span>{% endif %}
+                <span class="fw-bold fs-4">{{ sale.balance_due|money }}</span>
+            </div>
+            <div class="small text-muted text-end mt-n2">balance of {{ sale.total|money }}</div>
             <button onclick="window.print()" class="btn btn-dark"><i class="bi bi-printer"></i> Print invoice</button>
+            {% if not sale.invoice_number and not sale.is_voided %}
+            <form method="post" action="{% url 'sales:issue_invoice' sale.id %}" class="d-grid">
+                {% csrf_token %}<button class="btn btn-accent"><i class="bi bi-file-earmark-check"></i> Issue invoice number</button>
+            </form>
+            {% endif %}
+            {% if sale.customer and sale.balance_due > 0 %}
+            <a href="{% url 'customers:customer_detail' sale.customer.id %}#pay" class="btn btn-success"><i class="bi bi-cash-coin"></i> Receive payment</a>
+            {% endif %}
             <a href="{% url 'sales:receipt' sale.id %}" class="btn btn-outline-secondary"><i class="bi bi-receipt"></i> Till receipt</a>
             {% if sale.customer %}<a href="{% url 'customers:customer_detail' sale.customer.id %}" class="btn btn-outline-secondary">Customer statement</a>{% endif %}
+            <a href="{% url 'sales:invoice_list' %}" class="btn btn-link">All invoices</a>
         </div></div>
     </aside>
 </div>

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load pos_tags %}
+{% block title %}Invoices{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h3>Invoices</h3>
+    <a href="{% url 'sales:invoice_desk' %}" class="btn btn-accent"><i class="bi bi-file-earmark-ruled"></i> New Invoice</a>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="card stat-card"><div class="stat-label">Outstanding on invoices</div><div class="stat-value money">{{ outstanding|money }}</div></div></div>
+    <div class="col-md-6"><div class="card stat-card {% if overdue_count %}border-danger{% endif %}"><div class="stat-label">Overdue</div>
+        <div class="stat-value money {% if overdue_count %}text-danger{% endif %}">{{ overdue_total|money }}</div>
+        <div class="small text-muted">{{ overdue_count }} invoice{{ overdue_count|pluralize }} past due date</div></div></div>
+</div>
+
+<form method="get" class="filter-bar row g-2 align-items-center">
+    <div class="col-md-5"><input type="search" name="q" value="{{ q }}" class="form-control" placeholder="INV number, customer name or phone"></div>
+    <div class="col-md-7">
+        <div class="btn-group">
+            <button name="status" value="all" class="btn btn-sm {% if status == 'all' %}btn-dark{% else %}btn-outline-dark{% endif %}">All</button>
+            <button name="status" value="unpaid" class="btn btn-sm {% if status == 'unpaid' %}btn-dark{% else %}btn-outline-dark{% endif %}">Unpaid</button>
+            <button name="status" value="overdue" class="btn btn-sm {% if status == 'overdue' %}btn-danger{% else %}btn-outline-danger{% endif %}">Overdue</button>
+            <button name="status" value="paid" class="btn btn-sm {% if status == 'paid' %}btn-success{% else %}btn-outline-success{% endif %}">Paid</button>
+        </div>
+    </div>
+</form>
+
+<div class="table-card">
+<table class="table table-hover align-middle">
+    <thead><tr><th>Invoice</th><th>Date</th><th>Bill to</th><th>Due</th><th class="text-end">Total</th><th class="text-end">Balance</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for inv in page_obj %}
+    <tr class="{% if inv.is_voided %}text-muted text-decoration-line-through{% endif %}">
+        <td class="fw-semibold">{{ inv.invoice_reference }}<div class="small text-muted fw-normal">{{ inv.receipt_number }}</div></td>
+        <td class="small text-nowrap">{{ inv.created_at|date:"d M Y" }}</td>
+        <td>{{ inv.client_name }}<div class="small text-muted">{{ inv.branch.name }}</div></td>
+        <td class="small text-nowrap {% if inv.is_overdue %}text-danger fw-semibold{% endif %}">
+            {% if inv.due_date %}{{ inv.due_date|date:"d M Y" }}{% if inv.is_overdue %}<div>{{ inv.due_date|timesince:today }} late</div>{% endif %}{% endif %}
+        </td>
+        <td class="text-end money">{{ inv.total|money }}</td>
+        <td class="text-end money fw-semibold">{{ inv.balance_due|money }}</td>
+        <td>
+            {% if inv.is_voided %}<span class="badge bg-secondary">Void</span>
+            {% elif inv.payment_status == 'PAID' %}<span class="badge bg-success">Paid</span>
+            {% elif inv.is_overdue %}<span class="badge bg-danger">Overdue</span>
+            {% else %}<span class="badge bg-warning text-dark">{{ inv.get_payment_status_display }}</span>{% endif %}
+        </td>
+        <td class="text-end"><a href="{% url 'sales:invoice' inv.id %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-earmark-text"></i></a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="text-center text-muted py-4">No invoices here yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% include "partials/pagination.html" %}
+{% endblock %}

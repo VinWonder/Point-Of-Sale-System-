@@ -90,3 +90,10 @@ tr:hover .row-remove { visibility: visible; }
     .row-remove, .item-suggest { display: none !important; }
     .doc-table th, .doc-title, .doc-client-tab { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* --- Invoice extras --- */
+.doc-table tfoot tr.doc-grand td { background: var(--ink-soft); font-size: 14px; }
+.doc-paybox { border: 1px solid var(--ink); border-left-width: 4px; padding: 6px 10px; margin-top: 12px; font-size: 12px; }
+.doc-paybox-title { color: var(--ink); font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; margin-bottom: 2px; }
+.doc-paybox-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 4px 16px; }
+@media print { .doc-table tfoot tr.doc-grand td { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

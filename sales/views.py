@@ -24,6 +24,7 @@ from inventory.models import Category, Product, Stock
 from payments.mpesa import InvalidPhoneNumber, normalize_phone, simulation_enabled
 from registers.services import current_shift
 from .models import Sale, SaleReturn, Quotation
+from .invoices import create_invoice, issue_invoice
 from .quotations import save_quotation
 from .services import SaleError, checkout, parse_lines, process_return, void_sale
 
@@ -139,6 +140,38 @@ def create_quotation(request):
 
 @login_required
 @require_POST
+def create_invoice_view(request):
+    """Issue an invoice from the Invoice Desk."""
+    if ShopSettings.load().require_open_shift and not current_shift(request.user):
+        return JsonResponse({'error': 'Open your till shift before selling (Till > My Shift).'}, status=400)
+    try:
+        data = _json_body(request)
+        customer = None
+        if data.get('customer_id'):
+            customer = get_object_or_404(Customer, pk=data['customer_id'])
+        method = data.get('payment_method')
+        mpesa_phone = ''
+        if method == 'MPESA':
+            try:
+                mpesa_phone = normalize_phone(data.get('mpesa_phone'))
+            except InvalidPhoneNumber as exc:
+                raise SaleError(str(exc))
+        sale = create_invoice(
+            user=request.user, raw_items=data.get('items', []), payment_method=method, customer=customer,
+            customer_name=data.get('customer_name', ''), customer_phone=data.get('customer_phone', ''),
+            due_days=data.get('due_days'), notes=data.get('notes', ''), cash_tendered=data.get('cash_tendered'),
+        )
+    except SaleError as exc:
+        return JsonResponse({'error': str(exc)}, status=exc.status)
+    if method == 'MPESA':
+        redirect_url = f"{reverse('sales:receipt', args=[sale.id])}?mpesa={mpesa_phone}"
+    else:
+        redirect_url = reverse('sales:invoice', args=[sale.id])
+    return JsonResponse({'sale_id': sale.id, 'reference': sale.invoice_reference, 'redirect': redirect_url})
+
+
+@login_required
+@require_POST
 def convert_quotation(request, quotation_id):
     """Customer accepted the quote — turn it into a real sale at the quoted prices."""
     quotation = get_object_or_404(Quotation, pk=quotation_id, status=Quotation.Status.DRAFT)
@@ -170,14 +203,15 @@ def convert_quotation(request, quotation_id):
             )
             quotation.status = Quotation.Status.CONVERTED
             quotation.save(update_fields=['status'])
+            sale = issue_invoice(sale, due_days=request.POST.get('due_days'))
     except SaleError as exc:
         messages.error(request, str(exc))
         return redirect('sales:quotation', quotation_id=quotation.id)
 
-    messages.success(request, f'{quotation.reference} recorded as sale {sale.receipt_number}.')
+    messages.success(request, f'{quotation.reference} invoiced as {sale.invoice_reference}.')
     if payment_method == 'MPESA':
         return redirect(f"{reverse('sales:receipt', args=[sale.id])}?mpesa={mpesa_phone}")
-    return redirect('sales:receipt', sale_id=sale.id)
+    return redirect('sales:invoice', sale_id=sale.id)
 
 
 @login_required
@@ -214,6 +248,7 @@ def quotation_view(request, quotation_id):
     return render(request, 'sales/quotation.html', {
         'quotation': quotation, 'can_sell': can_sell,
         'whatsapp_url': whatsapp_link(quotation, items),
+        'due_options': [0, 7, 14, 30, 60, 90],
         **_document_context(items, sum((i.subtotal for i in items), Decimal('0.00'))),
     })
 
@@ -266,8 +301,64 @@ def sale_invoice(request, sale_id):
     )
     items = list(sale.items.select_related('product'))
     context = _document_context(items, sale.subtotal)
-    context.update({'sale': sale, 'payments': sale.payments.filter(status='SUCCESS')})
+    context.update({
+        'sale': sale,
+        'payments': sale.payments.filter(status='SUCCESS'),
+        'net_of_vat': sale.total - sale.tax_amount,
+    })
     return render(request, 'sales/invoice.html', context)
+
+
+@login_required
+@require_POST
+def issue_invoice_view(request, sale_id):
+    """Give a till sale a formal invoice number (e.g. a company asks for an invoice afterwards)."""
+    sale = get_object_or_404(Sale, pk=sale_id)
+    try:
+        sale = issue_invoice(sale)
+    except SaleError as exc:
+        messages.error(request, str(exc))
+    else:
+        log_action(request.user, f'Issued invoice {sale.invoice_reference} for sale #{sale.pk}', sale)
+        messages.success(request, f'Invoice {sale.invoice_reference} issued.')
+    return redirect('sales:invoice', sale_id=sale.id)
+
+
+@login_required
+def invoice_list(request):
+    """Every numbered invoice, with what is still owed and what is overdue."""
+    today = timezone.localdate()
+    invoices = Sale.objects.filter(invoice_number__isnull=False).select_related('customer', 'branch', 'served_by')
+    if request.user.role == User.Role.CASHIER and request.user.branch_id:
+        invoices = invoices.filter(branch_id=request.user.branch_id)
+    unpaid = Q(payment_status__in=[Sale.PaymentStatus.UNPAID, Sale.PaymentStatus.PARTIAL]) & ~Q(status=Sale.Status.VOIDED)
+    status = request.GET.get('status', 'all')
+    if status == 'unpaid':
+        invoices = invoices.filter(unpaid)
+    elif status == 'overdue':
+        invoices = invoices.filter(unpaid, due_date__lt=today)
+    elif status == 'paid':
+        invoices = invoices.filter(payment_status=Sale.PaymentStatus.PAID).exclude(status=Sale.Status.VOIDED)
+    q = request.GET.get('q', '').strip()
+    if q:
+        query = Q(customer__name__icontains=q) | Q(customer_name__icontains=q) | Q(customer__phone_number__icontains=q)
+        digits = q.upper().replace('INV', '').strip('-# ')
+        if digits.isdigit():
+            query |= Q(invoice_number=int(digits))
+        invoices = invoices.filter(query)
+
+    everything = Sale.objects.filter(invoice_number__isnull=False).filter(unpaid)
+    if request.user.role == User.Role.CASHIER and request.user.branch_id:
+        everything = everything.filter(branch_id=request.user.branch_id)
+    owed = everything.aggregate(t=Sum('total'), p=Sum('amount_paid'))
+    overdue = everything.filter(due_date__lt=today).aggregate(t=Sum('total'), p=Sum('amount_paid'))
+    return render(request, 'sales/invoice_list.html', {
+        'page_obj': paginate(request, invoices.order_by('-invoice_number')),
+        'status': status, 'q': q, 'today': today,
+        'outstanding': (owed['t'] or 0) - (owed['p'] or 0),
+        'overdue_total': (overdue['t'] or 0) - (overdue['p'] or 0),
+        'overdue_count': everything.filter(due_date__lt=today).count(),
+    })
 
 
 def filtered_sales(request):
@@ -419,7 +510,13 @@ def sale_return_create(request, sale_id):
 
 
 @login_required
-def quotation_desk(request, quotation_id=None):
+def invoice_desk(request):
+    """Same paper editor, issuing a numbered invoice straight away (goods leave the shop)."""
+    return quotation_desk(request, doc='invoice')
+
+
+@login_required
+def quotation_desk(request, quotation_id=None, doc='quotation'):
     """
     Paper-style editor: build a quotation line by line, print it as a draft,
     save it (numbered QT-0001...), then record the sale when the customer pays.
@@ -454,12 +551,20 @@ def quotation_desk(request, quotation_id=None):
             ],
         }
     settings = ShopSettings.load()
-    next_number = (Quotation.objects.aggregate(m=Max('number'))['m'] or 0) + 1
+    if doc == 'invoice':
+        next_number = (Sale.objects.aggregate(m=Max('invoice_number'))['m'] or 0) + 1
+        next_reference = f'INV-{next_number:04d}'
+    else:
+        next_number = (Quotation.objects.aggregate(m=Max('number'))['m'] or 0) + 1
+        next_reference = f'QT-{next_number:04d}'
     return render(request, 'sales/quotation_desk.html', {
         'quotation': quotation,
+        'doc': doc,
         'desk_config': {
             'initial': initial,
-            'nextReference': f'QT-{next_number:04d}',
+            'docType': doc,
+            'dueDays': settings.invoice_due_days,
+            'nextReference': next_reference,
             'maxDiscount': float(settings.max_cashier_discount_percent),
             'role': request.user.role,
             'vatRate': float(settings.vat_rate),
@@ -467,6 +572,7 @@ def quotation_desk(request, quotation_id=None):
                 'products': reverse('inventory:product_search_api'),
                 'customers': reverse('customers:customer_search_api'),
                 'save': reverse('sales:create_quotation'),
+                'invoice': reverse('sales:create_invoice'),
             },
         },
         'today': timezone.localdate(),
