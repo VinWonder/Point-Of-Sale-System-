@@ -118,3 +118,110 @@ def staff_performance(start, end, branch=None):
         .annotate(revenue=Sum('total'), count=Count('id'), discounts=Sum('discount_amount'))
         .order_by('-revenue')
     )
+
+
+PERIODS = {
+    'today': 'Today',
+    '7d': 'Last 7 days',
+    '30d': 'Last 30 days',
+    'month': 'This month',
+}
+
+
+def period_range(key, today):
+    """
+    (start, end, previous_start, previous_end) for a dashboard period. The
+    previous range has the same length and ends the day before `start`, so
+    deltas compare like with like (this month so far vs the same days last month).
+    """
+    if key == '7d':
+        start = today - timedelta(days=6)
+    elif key == '30d':
+        start = today - timedelta(days=29)
+    elif key == 'month':
+        start = today.replace(day=1)
+    else:
+        start = today
+    length = (today - start).days
+    if key == 'month':
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+        prev_end = min(prev_start + timedelta(days=length), prev_end)
+    else:
+        prev_end = start - timedelta(days=1)
+        prev_start = prev_end - timedelta(days=length)
+    return start, today, prev_start, prev_end
+
+
+def collected(start, end, branch=None):
+    """Money actually received in the range, by method (sale payments + debt repayments)."""
+    from customers.models import DebtPayment
+    from payments.models import Payment
+
+    payments = Payment.objects.filter(status=Payment.Status.SUCCESS, debt_payment__isnull=True).exclude(
+        method=Payment.Method.CREDIT_NOTE)
+    payments = _between(payments, start, end)
+    debts = _between(DebtPayment.objects.all(), start, end)
+    if branch:
+        payments = payments.filter(sale__branch=branch)
+        debts = debts.filter(branch=branch)
+    by_method = {}
+    for qs in (payments, debts):
+        for row in qs.values('method').annotate(t=Sum('amount')):
+            by_method[row['method']] = by_method.get(row['method'], Decimal('0')) + row['t']
+    return by_method
+
+
+def hourly_series(day, branch=None):
+    """Revenue for each opening hour (06:00-21:00) of one day, in shop time."""
+    from django.db.models.functions import ExtractHour
+
+    rows = (
+        live_sales(branch).filter(created_at__date=day)
+        .annotate(h=ExtractHour('created_at')).values('h').annotate(revenue=Sum('total'), count=Count('id'))
+    )
+    by_hour = {r['h']: r for r in rows}
+    return [
+        {'hour': h, 'revenue': float(by_hour.get(h, {}).get('revenue') or 0), 'count': by_hour.get(h, {}).get('count') or 0}
+        for h in range(6, 22)
+    ]
+
+
+def busiest_hours(start, end, branch=None):
+    """Average sales count per hour of day across the range — when to have more staff on the counter."""
+    from django.db.models.functions import ExtractHour
+
+    rows = (
+        _between(live_sales(branch), start, end)
+        .annotate(h=ExtractHour('created_at')).values('h').annotate(count=Count('id'))
+    )
+    by_hour = {r['h']: r['count'] for r in rows}
+    return [{'hour': h, 'count': by_hour.get(h, 0)} for h in range(6, 22)]
+
+
+def category_sales(start, end, branch=None, limit=6):
+    items = SaleItem.objects.filter(sale__in=_between(live_sales(branch), start, end))
+    value = ExpressionWrapper(
+        (F('quantity') - F('returned_quantity')) * F('unit_price'),
+        output_field=DecimalField(max_digits=14, decimal_places=2),
+    )
+    rows = list(
+        items.values('product__category__name').annotate(revenue=Sum(value)).filter(revenue__gt=0).order_by('-revenue')
+    )
+    head, tail = rows[:limit], rows[limit:]
+    result = [{'name': r['product__category__name'] or 'Uncategorised', 'revenue': float(r['revenue'])} for r in head]
+    if tail:
+        result.append({'name': 'Other', 'revenue': float(sum(r['revenue'] for r in tail))})
+    return result
+
+
+def stock_health(branch=None):
+    from inventory.models import Stock
+
+    stocks = Stock.objects.filter(product__is_active=True)
+    if branch:
+        stocks = stocks.filter(branch=branch)
+    out = stocks.filter(quantity__lte=0).count()
+    low = stocks.filter(quantity__gt=0, quantity__lte=F('product__reorder_level')).count()
+    total = stocks.count()
+    return {'out': out, 'low': low, 'ok': total - out - low, 'total': total}
