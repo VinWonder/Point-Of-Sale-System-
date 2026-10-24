@@ -116,7 +116,7 @@ class ReportViewTests(MetricsTestBase):
 
 
 class DashboardAttentionTests(MetricsTestBase):
-    def test_overdue_invoice_and_money_in_today(self):
+    def test_overdue_invoice_and_money_collected(self):
         from datetime import timedelta
         from sales.invoices import create_invoice
         customer = Customer.objects.create(name='Late Payer', phone_number='254799', credit_limit=10000)
@@ -128,11 +128,69 @@ class DashboardAttentionTests(MetricsTestBase):
         ctx = self.client.get(reverse('dashboard:index')).context
         titles = [a['title'] for a in ctx['attention']]
         self.assertIn('1 overdue invoice', titles)
-        self.assertEqual(ctx['collected_today'], Decimal('500.00'))
+        self.assertEqual(ctx['collected_now'], Decimal('500.00'))
         self.assertEqual(ctx['unpaid_invoices'], 1)
         self.assertEqual(ctx['unpaid_invoice_balance'], Decimal('1000.00'))
+        cash = next(m for m in ctx['mix'] if m['label'] == 'Cash')
+        self.assertEqual(cash['share'], 100.0)
 
     def test_all_clear_when_nothing_pending(self):
         Stock.objects.update(quantity=100)
         self.client.force_login(self.owner)
         self.assertContains(self.client.get(reverse('dashboard:index')), 'All clear')
+
+
+class DashboardPeriodTests(MetricsTestBase):
+    def test_period_range_lengths_match(self):
+        from datetime import date
+        today = date(2026, 10, 24)
+        self.assertEqual(metrics.period_range('today', today), (today, today, date(2026, 10, 23), date(2026, 10, 23)))
+        start, end, ps, pe = metrics.period_range('7d', today)
+        self.assertEqual(((end - start).days, (pe - ps).days, pe), (6, 6, date(2026, 10, 17)))
+        self.assertEqual(metrics.period_range('month', today)[2:], (date(2026, 9, 1), date(2026, 9, 24)))
+
+    def test_each_period_renders_with_deltas(self):
+        self.sell(2)
+        self.client.force_login(self.owner)
+        for period in ('today', '7d', '30d', 'month', 'bogus'):
+            with self.subTest(period=period):
+                res = self.client.get(reverse('dashboard:index'), {'period': period})
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.context['kpis'][0]['value'], Decimal('1000.00'))
+
+    def test_today_chart_is_hourly(self):
+        self.client.force_login(self.owner)
+        chart = self.client.get(reverse('dashboard:index')).context['chart']
+        self.assertEqual(chart['labels'][0], '06:00')
+        self.assertEqual(len(chart['current']), len(chart['previous']))
+
+    def test_monthly_target_projection(self):
+        from core.models import ShopSettings
+        settings = ShopSettings.load()
+        settings.monthly_sales_target = Decimal('100000')
+        settings.save()
+        self.sell(10)
+        self.client.force_login(self.owner)
+        target = self.client.get(reverse('dashboard:index')).context['target']
+        self.assertEqual(target['sold'], Decimal('5000.00'))
+        self.assertEqual(target['percent'], 5.0)
+
+    def test_cashier_sees_average_sale_not_profit(self):
+        self.client.force_login(self.cashier)
+        res = self.client.get(reverse('dashboard:index'))
+        labels = [k['label'] for k in res.context['kpis']]
+        self.assertIn('Average sale', labels)
+        self.assertNotIn('Gross profit', labels)
+        self.assertNotContains(res, 'Profit snapshot')
+
+    def test_category_sales_folds_tail_into_other(self):
+        from inventory.models import Category
+        for i in range(8):
+            cat = Category.objects.create(name=f'Cat {i}')
+            p = Product.objects.create(sku=f'S{i}', name=f'Item {i}', category=cat, cost_price=1, sell_price=10 + i)
+            Stock.objects.create(product=p, branch=self.main, quantity=5)
+            checkout(user=self.owner, branch=self.main, payment_method='CASH',
+                     raw_items=[{'product_id': p.pk, 'qty': 1}])
+        rows = metrics.category_sales(self.today, self.today)
+        self.assertEqual(len(rows), 7)
+        self.assertEqual(rows[-1]['name'], 'Other')

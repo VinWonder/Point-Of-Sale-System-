@@ -6,106 +6,171 @@
 {% block content %}
 {{ chart|json_script:"chart-data" }}
 
-<!-- ============ Hero ============ -->
-<section class="dash-hero">
-    <div class="dash-hero-top">
-        <div>
-            <div class="dash-date">{% now "l, j F Y" %}{% if branch %} · {{ branch.name }}{% else %} · All branches{% endif %}</div>
-            <h2 class="dash-greeting">{% now "H" as hour %}{% if hour < "12" %}Good morning{% elif hour < "17" %}Good afternoon{% else %}Good evening{% endif %}, {{ user.first_name|default:user.username }}</h2>
-            <div class="dash-sub">
-                {% if today.count %}<strong>{{ today.revenue|money }}</strong> sold today in {{ today.count }} sale{{ today.count|pluralize }}{% if today_growth is not None %}
-                <span class="trend {% if today_growth >= 0 %}up{% else %}down{% endif %}">{% if today_growth >= 0 %}▲{% else %}▼{% endif %} {{ today_growth }}% vs yesterday</span>{% endif %}
-                {% else %}No sales yet today. Press <kbd>F2</kbd> to start a quotation.{% endif %}
-            </div>
+<!-- ============ Header ============ -->
+<header class="dash-header">
+    <div>
+        <h1 class="dash-title">{% now "H" as hour %}{% if hour < "12" %}Good morning{% elif hour < "17" %}Good afternoon{% else %}Good evening{% endif %}, {{ user.first_name|default:user.username }}</h1>
+        <div class="dash-subtitle">
+            Here's how {% if branch %}<strong>{{ branch.name }}</strong>{% else %}<strong>{{ shop.business_name }}</strong>{% endif %} is doing
+            · {% if start == end %}{{ start|date:"l j F" }}{% else %}{{ start|date:"j M" }} – {{ end|date:"j M Y" }}{% endif %}
         </div>
+    </div>
+    <div class="dash-controls">
+        <span class="live-pill" title="Refreshes every 2 minutes while this tab is open"><span class="live-dot"></span> Live · {{ updated_at|date:"H:i" }}</span>
         {% if user.role == 'OWNER' %}
-        <form method="get" class="dash-branch">
-            <i class="bi bi-geo-alt"></i>
+        <form method="get" class="d-flex">
+            <input type="hidden" name="period" value="{{ period }}">
             <select name="branch" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Branch">
                 <option value="">All branches</option>
                 {% for b in branches %}<option value="{{ b.id }}" {% if branch.id == b.id %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
             </select>
         </form>
         {% endif %}
+        <nav class="segmented" aria-label="Period">
+            {% for key, label in periods.items %}
+            <a href="?{% query_replace period=key %}" class="{% if key == period %}active{% endif %}">{{ label }}</a>
+            {% endfor %}
+        </nav>
     </div>
+</header>
 
-    <div class="quick-actions">
-        <a href="{% url 'sales:quotation_desk' %}" class="qa-tile qa-primary">
-            <i class="bi bi-file-earmark-plus"></i><span>New Quotation</span><kbd>F2</kbd>
-        </a>
-        <a href="{% url 'sales:invoice_desk' %}" class="qa-tile"><i class="bi bi-file-earmark-ruled"></i><span>New Invoice</span></a>
-        <a href="{% url 'sales:pos' %}" class="qa-tile"><i class="bi bi-upc-scan"></i><span>Quick sale</span></a>
-        <a href="{% url 'customers:customer_list' %}?status=owing" class="qa-tile"><i class="bi bi-cash-coin"></i><span>Receive payment</span></a>
-        {% if user.role != 'CASHIER' %}
-        <a href="{% url 'inventory:supplier_purchase_create' %}" class="qa-tile"><i class="bi bi-truck"></i><span>Receive stock</span></a>
-        {% else %}
-        <a href="{% url 'registers:my_shift' %}" class="qa-tile"><i class="bi bi-safe"></i><span>My till</span></a>
-        {% endif %}
-    </div>
-</section>
+<div class="action-bar">
+    <a href="{% url 'sales:quotation_desk' %}" class="action-btn action-primary"><i class="bi bi-file-earmark-plus"></i> New Quotation <kbd>F2</kbd></a>
+    <a href="{% url 'sales:invoice_desk' %}" class="action-btn"><i class="bi bi-file-earmark-ruled"></i> New Invoice</a>
+    <a href="{% url 'sales:pos' %}" class="action-btn"><i class="bi bi-upc-scan"></i> Quick sale</a>
+    <a href="{% url 'customers:customer_list' %}?status=owing" class="action-btn"><i class="bi bi-cash-coin"></i> Receive payment</a>
+    {% if user.role != 'CASHIER' %}<a href="{% url 'inventory:supplier_purchase_create' %}" class="action-btn"><i class="bi bi-truck"></i> Receive stock</a>
+    <a href="{% url 'reports:index' %}" class="action-btn"><i class="bi bi-bar-chart-line"></i> Reports</a>
+    {% else %}<a href="{% url 'registers:my_shift' %}" class="action-btn"><i class="bi bi-safe"></i> My till</a>{% endif %}
+</div>
 
 <!-- ============ KPIs ============ -->
+<div class="kpi-grid">
+    {% for k in kpis %}
+    <div class="kpi kpi-{{ k.tone }}">
+        <div class="kpi-head">
+            <span class="kpi-label">{{ k.label }}</span>
+            {% if k.spark %}<span class="kpi-spark" title="Trend over {{ period_label|lower }}">{% sparkline k.spark 96 34 %}</span>
+            {% else %}<span class="kpi-icon"><i class="bi {{ k.icon }}"></i></span>{% endif %}
+        </div>
+        <div class="kpi-value" title="{% if k.money %}{{ k.value|money }}{% endif %}">{% if k.money %}{{ k.value|money_whole }}{% else %}{{ k.value|intcomma_plain }}{% endif %}</div>
+        <div class="kpi-foot">
+            {% if k.delta is not None %}
+            <span class="delta {% if k.delta >= 0 %}up{% else %}down{% endif %}">{% if k.delta >= 0 %}<i class="bi bi-arrow-up-right"></i>{% else %}<i class="bi bi-arrow-down-right"></i>{% endif %}{% if k.delta > 999 or k.delta < -999 %}{{ k.delta|floatformat:0 }}{% else %}{{ k.delta|floatformat:1 }}{% endif %}%</span>
+            <span class="text-muted">{{ compare_text }}</span>
+            {% else %}<span class="text-muted">no earlier data to compare</span>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
 <div class="row g-3 mb-3">
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi kpi-blue">
-            <div class="kpi-head"><span class="kpi-label">Revenue today</span><span class="kpi-icon"><i class="bi bi-graph-up-arrow"></i></span></div>
-            <div class="kpi-value money">{{ today.revenue|money }}</div>
-            <div class="kpi-foot"><span>{{ today.count }} sale{{ today.count|pluralize }} · last 7 days</span>{% sparkline spark_week %}</div>
+    <!-- Revenue: current vs previous -->
+    <div class="col-xl-8">
+        <div class="panel h-100">
+            <div class="panel-head">
+                <div>
+                    <div class="panel-title">Revenue {% if period == 'today' %}by hour{% else %}by day{% endif %}</div>
+                    <div class="panel-sub">{{ current.revenue|money }} from {{ current.count }} sale{{ current.count|pluralize }}{% if see_profit %} · {{ current.margin }}% gross margin{% endif %}</div>
+                </div>
+                <div class="legend">
+                    <span><i class="swatch" style="background:#2a78d6"></i>{{ period_label }}</span>
+                    <span><i class="swatch dashed"></i>{{ chart.compareLabel }}</span>
+                </div>
+            </div>
+            <div class="chart-box" style="height: 300px"><canvas id="revenueChart" role="img" aria-label="Revenue this period compared with the previous one"></canvas></div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi kpi-green">
-            <div class="kpi-head"><span class="kpi-label">Money in today</span><span class="kpi-icon"><i class="bi bi-wallet2"></i></span></div>
-            <div class="kpi-value money">{{ collected_today|money }}</div>
-            <div class="kpi-foot"><span>cash, M-Pesa, card &amp; repayments</span></div>
+
+    <div class="col-xl-4 d-flex flex-column gap-3">
+        {% if target %}
+        <!-- Monthly target -->
+        <div class="panel">
+            <div class="panel-head"><div class="panel-title">Monthly target</div>
+                <span class="badge {% if target.on_track %}text-bg-success{% else %}text-bg-warning{% endif %}">{% if target.on_track %}On track{% else %}Behind pace{% endif %}</span></div>
+            <div class="target">
+                <svg viewBox="0 0 120 120" class="ring" role="img" aria-label="{{ target.percent }}% of monthly target">
+                    <circle cx="60" cy="60" r="50" class="ring-bg"/>
+                    <circle cx="60" cy="60" r="50" class="ring-fg {% if target.on_track %}good{% endif %}" style="stroke-dasharray: {{ target.ring|floatformat:1 }} 100" pathLength="100"/>
+                    <text x="60" y="58" text-anchor="middle" class="ring-pct">{{ target.percent|floatformat:0 }}%</text>
+                    <text x="60" y="76" text-anchor="middle" class="ring-sub">of goal</text>
+                </svg>
+                <div class="target-facts">
+                    <div><span>Sold</span><strong>{{ target.sold|money_short }}</strong></div>
+                    <div><span>Goal</span><strong>{{ target.target|money_short }}</strong></div>
+                    <div><span>On pace for</span><strong>{{ target.projected|money_short }}</strong></div>
+                    {% if target.remaining %}<div><span>Needed / day</span><strong>{{ target.per_day_needed|money_short }}</strong></div>{% endif %}
+                    <div class="small text-muted">{{ target.days_left }} day{{ target.days_left|pluralize }} left this month</div>
+                </div>
+            </div>
         </div>
-    </div>
-    {% if user.role != 'CASHIER' %}
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi kpi-violet">
-            <div class="kpi-head"><span class="kpi-label">Gross profit today</span><span class="kpi-icon"><i class="bi bi-piggy-bank"></i></span></div>
-            <div class="kpi-value money">{{ today.gross_profit|money }}</div>
-            <div class="kpi-foot"><span>margin {{ today.margin }}% · avg sale {{ today.average_sale|money }}</span></div>
-        </div>
-    </div>
-    {% else %}
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi kpi-violet">
-            <div class="kpi-head"><span class="kpi-label">Open quotations</span><span class="kpi-icon"><i class="bi bi-file-earmark-text"></i></span></div>
-            <div class="kpi-value">{{ open_quotes }}</div>
-            <div class="kpi-foot"><span>worth {{ open_quotes_value|money }}</span></div>
-        </div>
-    </div>
-    {% endif %}
-    <div class="col-sm-6 col-xl-3">
-        <div class="kpi kpi-orange">
-            <div class="kpi-head"><span class="kpi-label">Owed to the shop</span><span class="kpi-icon"><i class="bi bi-journal-text"></i></span></div>
-            <div class="kpi-value money">{{ debt_total|money }}</div>
-            <div class="kpi-foot">{% if user.role != 'CASHIER' %}<a href="{% url 'reports:debt_aging' %}">Debt aging →</a>{% else %}<a href="{% url 'customers:customer_list' %}?status=owing">Who owes →</a>{% endif %}</div>
+        {% elif user.role == 'OWNER' and not branch %}
+        <a href="{% url 'core:settings' %}" class="panel panel-cta">
+            <i class="bi bi-bullseye"></i>
+            <div><div class="panel-title">Set a monthly sales target</div><div class="panel-sub">Track progress and month-end pace right here.</div></div>
+        </a>
+        {% endif %}
+
+        <!-- Payment mix -->
+        <div class="panel flex-grow-1">
+            <div class="panel-head"><div class="panel-title">How customers paid</div><div class="panel-sub money">{{ collected_now|money }}</div></div>
+            {% if collected_now %}
+            <div class="mix-bar" role="img" aria-label="Payment mix">
+                {% for m in mix %}{% if m.share %}<span style="width: {{ m.share }}%; background: {{ m.color }}" title="{{ m.label }} {{ m.share }}%"></span>{% endif %}{% endfor %}
+            </div>
+            <ul class="mix-legend">
+                {% for m in mix %}
+                <li><i class="swatch" style="background: {{ m.color }}"></i><span class="flex-grow-1">{{ m.label }}</span><span class="text-muted me-2">{{ m.share|floatformat:0 }}%</span><strong class="money">{{ m.amount|money }}</strong></li>
+                {% endfor %}
+            </ul>
+            {% else %}<div class="empty-note"><i class="bi bi-wallet2"></i> No payments received in this period yet.</div>{% endif %}
         </div>
     </div>
 </div>
 
 <div class="row g-3 mb-3">
-    <!-- Revenue chart -->
-    <div class="col-xl-8">
-        <div class="card h-100" x-data="{ range: 14 }" x-init="$watch('range', r => window.dashRevenue(r))">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>Revenue</span>
-                <div class="btn-group btn-group-sm" role="group" aria-label="Period">
-                    <template x-for="r in [7, 14, 30]" :key="r">
-                        <button type="button" class="btn" :class="range === r ? 'btn-dark' : 'btn-outline-secondary'" @click="range = r" x-text="r + ' days'"></button>
-                    </template>
-                </div>
-            </div>
-            <div class="card-body"><div style="height: 290px"><canvas id="revenueChart" role="img" aria-label="Daily revenue"></canvas></div></div>
+    <div class="col-lg-4">
+        <div class="panel h-100">
+            <div class="panel-head"><div><div class="panel-title">Busiest hours</div><div class="panel-sub">Number of sales by hour</div></div></div>
+            <div class="chart-box" style="height: 200px"><canvas id="hoursChart" role="img" aria-label="Sales by hour of day"></canvas></div>
         </div>
     </div>
+    <div class="col-lg-4">
+        <div class="panel h-100">
+            <div class="panel-head"><div><div class="panel-title">Sales by category</div><div class="panel-sub">{{ period_label }}</div></div></div>
+            {% if chart.categories %}<div class="chart-box" style="height: 200px"><canvas id="categoryChart" role="img" aria-label="Revenue by category"></canvas></div>
+            {% else %}<div class="empty-note"><i class="bi bi-tags"></i> Category sales appear once you sell.</div>{% endif %}
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="panel h-100">
+            <div class="panel-head"><div class="panel-title">Stock health</div><a href="{% url 'inventory:stock_list' %}" class="panel-link">Stock levels</a></div>
+            <div class="health-bar">
+                {% if stock.total %}
+                <span class="ok" style="flex: {{ stock.ok }}"></span><span class="low" style="flex: {{ stock.low }}"></span><span class="out" style="flex: {{ stock.out }}"></span>
+                {% endif %}
+            </div>
+            <div class="health-stats">
+                <a href="{% url 'inventory:stock_list' %}"><span class="dot ok"></span><strong>{{ stock.ok }}</strong> healthy</a>
+                <a href="{% url 'inventory:stock_list' %}?level=low"><span class="dot low"></span><strong>{{ stock.low }}</strong> low</a>
+                <a href="{% url 'inventory:stock_list' %}?level=out"><span class="dot out"></span><strong>{{ stock.out }}</strong> out</a>
+            </div>
+            <hr>
+            <div class="panel-title mb-2">Quotes → invoices</div>
+            <div class="pipeline">
+                <a href="{% url 'sales:quotation_list' %}" class="pipe-step"><span class="pipe-num">{{ open_quotes }}</span><span class="pipe-label">open quotes</span><span class="pipe-amt money">{{ open_quotes_value|money }}</span></a>
+                <span class="pipe-arrow"><i class="bi bi-arrow-right"></i>{% if quote_conversion is not None %}<small>{{ quote_conversion }}%</small>{% endif %}</span>
+                <a href="{% url 'sales:invoice_list' %}?status=unpaid" class="pipe-step"><span class="pipe-num">{{ unpaid_invoices }}</span><span class="pipe-label">unpaid invoices</span><span class="pipe-amt money">{{ unpaid_invoice_balance|money }}</span></a>
+            </div>
+        </div>
+    </div>
+</div>
 
+<div class="row g-3 mb-3">
     <!-- Needs attention -->
     <div class="col-xl-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between"><span><i class="bi bi-bell"></i> Needs attention</span>
+        <div class="panel h-100 p-0">
+            <div class="panel-head px-3 pt-3"><div class="panel-title"><i class="bi bi-bell"></i> Needs attention</div>
                 {% if attention %}<span class="badge rounded-pill text-bg-danger">{{ attention|length }}</span>{% endif %}</div>
             <div class="attention-list">
                 {% for a in attention %}
@@ -120,180 +185,138 @@
             </div>
         </div>
     </div>
-</div>
 
-<div class="row g-3 mb-3">
-    <!-- Money in today -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100">
-            <div class="card-header">Money in today</div>
-            <div class="card-body">
-                {% for c in collections %}
-                <div class="collect-row">
-                    <span class="collect-icon"><i class="bi {{ c.icon }}"></i></span>
-                    <span class="flex-grow-1">{{ c.label }}</span>
-                    <span class="money fw-semibold">{{ c.amount|money }}</span>
-                </div>
-                {% endfor %}
-                <div class="collect-row total"><span class="flex-grow-1">Total collected</span><span class="money">{{ collected_today|money }}</span></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quote to invoice pipeline -->
-    <div class="col-md-6 col-xl-4">
-        <div class="card h-100">
-            <div class="card-header">Quotes → invoices</div>
-            <div class="card-body">
-                <div class="pipeline">
-                    <a href="{% url 'sales:quotation_list' %}" class="pipe-step">
-                        <span class="pipe-num">{{ open_quotes }}</span><span class="pipe-label">Open quotations</span><span class="pipe-amt money">{{ open_quotes_value|money }}</span>
-                    </a>
-                    <span class="pipe-arrow"><i class="bi bi-arrow-right"></i>{% if quote_conversion is not None %}<small>{{ quote_conversion }}%</small>{% endif %}</span>
-                    <a href="{% url 'sales:invoice_list' %}?status=unpaid" class="pipe-step">
-                        <span class="pipe-num">{{ unpaid_invoices }}</span><span class="pipe-label">Unpaid invoices</span><span class="pipe-amt money">{{ unpaid_invoice_balance|money }}</span>
-                    </a>
-                </div>
-                <p class="small text-muted mb-0 mt-3">{% if quote_conversion is not None %}{{ quote_conversion }}% of this month's quotations became invoices.{% else %}No quotations yet this month.{% endif %}</p>
-            </div>
-        </div>
-    </div>
-
-    {% if user.role != 'CASHIER' %}
-    <!-- Month summary -->
+    <!-- Leaderboards -->
     <div class="col-xl-4">
-        <div class="card h-100">
-            <div class="card-header">This month</div>
-            <div class="card-body month-grid">
-                <div><div class="text-muted small">Revenue</div><div class="fw-bold money">{{ month.revenue|money }}</div>
-                    {% if month_growth is not None %}<div class="small {% if month_growth >= 0 %}text-success{% else %}text-danger{% endif %}">{% if month_growth >= 0 %}▲{% else %}▼{% endif %} {% if month_growth > 100 or month_growth < -100 %}{{ month_growth|floatformat:0 }}{% else %}{{ month_growth }}{% endif %}% vs last month</div>{% endif %}</div>
-                <div><div class="text-muted small">Gross profit</div><div class="fw-bold money">{{ month.gross_profit|money }}</div><div class="small text-muted">{{ month.margin }}% margin</div></div>
-                <div><div class="text-muted small">Expenses</div><div class="fw-bold money">{{ month_expenses|money }}</div></div>
-                <div><div class="text-muted small">Net profit</div><div class="fw-bold money {% if month_net_profit < 0 %}text-danger{% else %}text-success{% endif %}">{{ month_net_profit|money }}</div></div>
+        <div class="panel h-100" x-data="{ board: '{% if branch_board %}branches{% else %}staff{% endif %}' }">
+            <div class="panel-head">
+                <div class="panel-title">Leaderboard</div>
+                {% if branch_board %}
+                <div class="segmented segmented-sm">
+                    <a href="#" :class="{active: board === 'branches'}" @click.prevent="board = 'branches'">Branches</a>
+                    <a href="#" :class="{active: board === 'staff'}" @click.prevent="board = 'staff'">Staff</a>
+                </div>
+                {% endif %}
             </div>
-            <div class="card-footer bg-white small"><a href="{% url 'reports:profit_and_loss' %}">Full profit &amp; loss →</a></div>
+            <ol class="board" x-show="board === 'staff'">
+                {% for s in staff_board %}
+                <li>
+                    <span class="rank">{{ forloop.counter }}</span>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex justify-content-between"><span class="text-truncate fw-semibold">{{ s.served_by__first_name|default:s.served_by__username }}</span><span class="money">{{ s.revenue|money }}</span></div>
+                        <div class="board-bar"><span style="width: {{ s.share|floatformat:0 }}%"></span></div>
+                        <div class="small text-muted">{{ s.count }} sale{{ s.count|pluralize }}</div>
+                    </div>
+                </li>
+                {% empty %}<li class="text-muted">No sales in this period.</li>{% endfor %}
+            </ol>
+            {% if branch_board %}
+            <ol class="board" x-show="board === 'branches'">
+                {% for b in branch_board %}
+                <li>
+                    <span class="rank">{{ forloop.counter }}</span>
+                    <div class="flex-grow-1 min-w-0">
+                        <div class="d-flex justify-content-between"><span class="text-truncate fw-semibold">{{ b.branch__name }}</span><span class="money">{{ b.revenue|money }}</span></div>
+                        <div class="board-bar"><span style="width: {{ b.share|floatformat:0 }}%"></span></div>
+                        <div class="small text-muted">{{ b.count }} sale{{ b.count|pluralize }}</div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ol>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
+
+    <!-- Profit (managers) or debtors (cashiers) -->
+    <div class="col-xl-4">
+        {% if see_profit %}
+        <div class="panel h-100">
+            <div class="panel-head"><div class="panel-title">Profit snapshot</div><a href="{% url 'reports:profit_and_loss' %}?range=" class="panel-link">Full P&amp;L</a></div>
+            <dl class="pnl">
+                <div><dt>Net revenue</dt><dd class="money">{{ current.net_revenue|money }}</dd></div>
+                <div><dt>Cost of goods</dt><dd class="money text-muted">−{{ current.cost|money }}</dd></div>
+                <div class="sub"><dt>Gross profit</dt><dd class="money">{{ current.gross_profit|money }}</dd></div>
+                <div><dt>Expenses</dt><dd class="money text-muted">−{{ expenses|money }}</dd></div>
+                <div class="total"><dt>Net profit</dt><dd class="money {% if net_profit < 0 %}text-danger{% else %}text-success{% endif %}">{{ net_profit|money }}</dd></div>
+            </dl>
+            <div class="debt-strip"><i class="bi bi-journal-text"></i> Customers owe <strong class="money">{{ debt_total|money }}</strong> <a href="{% url 'reports:debt_aging' %}">Aging →</a></div>
+        </div>
+        {% else %}
+        <div class="panel h-100">
+            <div class="panel-head"><div class="panel-title">Top debtors</div><a href="{% url 'customers:customer_list' %}?status=owing" class="panel-link">All</a></div>
+            <ul class="debtor-list">
+                {% for c in top_debtors %}
+                <li><a href="{% url 'customers:customer_detail' c.id %}"><span class="avatar avatar-sm">{{ c.name|slice:":1"|upper }}</span><span class="flex-grow-1 text-truncate">{{ c.name }}</span><strong class="money">{{ c.balance_owed|money }}</strong></a></li>
+                {% empty %}<li class="text-muted">Nobody owes the shop anything.</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
 <div class="row g-3">
     <!-- Recent activity -->
-    <div class="col-xl-7">
-        <div class="card h-100" x-data="{ tab: 'quotes' }">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span>Recent activity</span>
-                <ul class="nav nav-pills dash-tabs">
-                    <li class="nav-item"><button type="button" class="nav-link" :class="{active: tab === 'quotes'}" @click="tab = 'quotes'">Quotations</button></li>
-                    <li class="nav-item"><button type="button" class="nav-link" :class="{active: tab === 'invoices'}" @click="tab = 'invoices'">Invoices</button></li>
-                    <li class="nav-item"><button type="button" class="nav-link" :class="{active: tab === 'sales'}" @click="tab = 'sales'">Sales</button></li>
-                </ul>
+    <div class="col-xl-{% if see_profit %}8{% else %}12{% endif %}">
+        <div class="panel p-0" x-data="{ tab: 'quotes' }">
+            <div class="panel-head px-3 pt-3">
+                <div class="panel-title">Recent activity</div>
+                <div class="segmented segmented-sm">
+                    <a href="#" :class="{active: tab === 'quotes'}" @click.prevent="tab = 'quotes'">Quotations</a>
+                    <a href="#" :class="{active: tab === 'invoices'}" @click.prevent="tab = 'invoices'">Invoices</a>
+                    <a href="#" :class="{active: tab === 'sales'}" @click.prevent="tab = 'sales'">Sales</a>
+                </div>
             </div>
-            <div class="list-group list-group-flush" x-show="tab === 'quotes'">
+            <div class="activity" x-show="tab === 'quotes'">
                 {% for q in recent_quotes %}
-                <a href="{% url 'sales:quotation' q.id %}" class="list-group-item list-group-item-action activity-row">
+                <a href="{% url 'sales:quotation' q.id %}" class="activity-row">
                     <span class="doc-chip chip-quote">{{ q.reference }}</span>
-                    <span class="flex-grow-1 min-w-0 text-truncate">{{ q.client_name }}<small class="d-block text-muted">{{ q.created_at|timesince }} ago</small></span>
+                    <span class="flex-grow-1 min-w-0 text-truncate">{{ q.client_name }}</span>
+                    <span class="text-muted small d-none d-md-inline">{{ q.created_at|timesince }} ago</span>
                     <span class="money fw-semibold">{{ q.total|money }}</span>
-                    {% if q.status == 'CONVERTED' %}<span class="badge text-bg-success">Invoiced</span>{% elif q.is_expired or q.status == 'EXPIRED' %}<span class="badge text-bg-secondary">Expired</span>{% else %}<span class="badge text-bg-info">Open</span>{% endif %}
+                    {% if q.status == 'CONVERTED' %}<span class="status s-good">Invoiced</span>{% elif q.is_expired or q.status == 'EXPIRED' %}<span class="status s-muted">Expired</span>{% else %}<span class="status s-info">Open</span>{% endif %}
                 </a>
-                {% empty %}<div class="list-group-item text-muted">No quotations yet. <a href="{% url 'sales:quotation_desk' %}">Write the first one</a>.</div>{% endfor %}
+                {% empty %}<div class="activity-empty">No quotations yet. <a href="{% url 'sales:quotation_desk' %}">Write the first one</a>.</div>{% endfor %}
             </div>
-            <div class="list-group list-group-flush" x-show="tab === 'invoices'" x-cloak>
+            <div class="activity" x-show="tab === 'invoices'" x-cloak>
                 {% for s in recent_invoices %}
-                <a href="{% url 'sales:invoice' s.id %}" class="list-group-item list-group-item-action activity-row">
+                <a href="{% url 'sales:invoice' s.id %}" class="activity-row">
                     <span class="doc-chip chip-invoice">{{ s.invoice_reference }}</span>
-                    <span class="flex-grow-1 min-w-0 text-truncate">{{ s.client_name }}<small class="d-block text-muted">{% if s.due_date %}due {{ s.due_date|date:"d M" }}{% endif %}</small></span>
+                    <span class="flex-grow-1 min-w-0 text-truncate">{{ s.client_name }}</span>
+                    <span class="text-muted small d-none d-md-inline">{% if s.due_date %}due {{ s.due_date|date:"d M" }}{% endif %}</span>
                     <span class="money fw-semibold">{{ s.total|money }}</span>
-                    {% if s.is_voided %}<span class="badge text-bg-secondary">Void</span>{% elif s.payment_status == 'PAID' %}<span class="badge text-bg-success">Paid</span>{% elif s.is_overdue %}<span class="badge text-bg-danger">Overdue</span>{% else %}<span class="badge text-bg-warning">Unpaid</span>{% endif %}
+                    {% if s.is_voided %}<span class="status s-muted">Void</span>{% elif s.payment_status == 'PAID' %}<span class="status s-good">Paid</span>{% elif s.is_overdue %}<span class="status s-bad">Overdue</span>{% else %}<span class="status s-warn">Unpaid</span>{% endif %}
                 </a>
-                {% empty %}<div class="list-group-item text-muted">No invoices yet. <a href="{% url 'sales:invoice_desk' %}">Issue one</a>.</div>{% endfor %}
+                {% empty %}<div class="activity-empty">No invoices yet. <a href="{% url 'sales:invoice_desk' %}">Issue one</a>.</div>{% endfor %}
             </div>
-            <div class="list-group list-group-flush" x-show="tab === 'sales'" x-cloak>
+            <div class="activity" x-show="tab === 'sales'" x-cloak>
                 {% for s in recent_sales %}
-                <a href="{% url 'sales:receipt' s.id %}" class="list-group-item list-group-item-action activity-row">
+                <a href="{% url 'sales:receipt' s.id %}" class="activity-row">
                     <span class="doc-chip chip-sale">{{ s.receipt_number }}</span>
-                    <span class="flex-grow-1 min-w-0 text-truncate">{{ s.client_name }}<small class="d-block text-muted">{{ s.created_at|timesince }} ago · {{ s.served_by.username|default:"" }}</small></span>
+                    <span class="flex-grow-1 min-w-0 text-truncate">{{ s.client_name }}</span>
+                    <span class="text-muted small d-none d-md-inline">{{ s.created_at|timesince }} ago · {{ s.served_by.username|default:"" }}</span>
                     <span class="money fw-semibold {% if s.is_voided %}text-decoration-line-through text-muted{% endif %}">{{ s.total|money }}</span>
                 </a>
-                {% empty %}<div class="list-group-item text-muted">No sales yet.</div>{% endfor %}
+                {% empty %}<div class="activity-empty">No sales yet.</div>{% endfor %}
             </div>
         </div>
     </div>
 
-    <!-- Best sellers / debtors -->
-    <div class="col-xl-5">
-        <div class="card mb-3">
-            <div class="card-header">Best sellers — last 30 days</div>
-            <div class="card-body">
-                {% if chart.top_labels %}<div style="height: 220px"><canvas id="topChart" role="img" aria-label="Top products by revenue"></canvas></div>
-                {% else %}<div class="text-muted small">Best sellers appear here once you have sales.</div>{% endif %}
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-header d-flex justify-content-between"><span>Top debtors</span><a href="{% url 'customers:customer_list' %}?status=owing" class="small">All</a></div>
-            <div class="list-group list-group-flush">
+    {% if see_profit %}
+    <div class="col-xl-4">
+        <div class="panel h-100">
+            <div class="panel-head"><div class="panel-title">Top debtors</div><a href="{% url 'customers:customer_list' %}?status=owing" class="panel-link">All</a></div>
+            <ul class="debtor-list">
                 {% for c in top_debtors %}
-                <a href="{% url 'customers:customer_detail' c.id %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2">
-                    <span class="text-truncate"><span class="avatar avatar-sm me-2">{{ c.name|slice:":1"|upper }}</span>{{ c.name }}</span>
-                    <span class="text-nowrap"><span class="money fw-semibold">{{ c.balance_owed|money }}</span>{% if c.is_defaulter %} <span class="badge text-bg-danger">Over limit</span>{% endif %}</span>
-                </a>
-                {% empty %}<div class="list-group-item text-muted">Nobody owes the shop anything.</div>{% endfor %}
-            </div>
+                <li><a href="{% url 'customers:customer_detail' c.id %}"><span class="avatar avatar-sm">{{ c.name|slice:":1"|upper }}</span><span class="flex-grow-1 text-truncate">{{ c.name }}{% if c.is_defaulter %} <span class="status s-bad">Over limit</span>{% endif %}</span><strong class="money">{{ c.balance_owed|money }}</strong></a></li>
+                {% empty %}<li class="text-muted">Nobody owes the shop anything.</li>{% endfor %}
+            </ul>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script>
-(function () {
-    const data = JSON.parse(document.getElementById('chart-data').textContent);
-    // Reference palette slot 1 (validated); text uses ink tokens, never series colour.
-    const SERIES = '#2a78d6', INK = '#52514e', GRID = '#e5e7eb';
-    const kes = v => 'KES ' + Number(v).toLocaleString('en-KE', { maximumFractionDigits: 0 });
-    Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
-    Chart.defaults.color = INK;
-    Chart.defaults.plugins.legend.display = false;
-    Chart.defaults.maintainAspectRatio = false;
-    const valueAxis = { grid: { color: GRID }, border: { display: false }, beginAtZero: true,
-                        ticks: { callback: kes, maxTicksLimit: 5, maxRotation: 0 } };
-    const catAxis = { grid: { display: false }, border: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 12 } };
-
-    const ctx = document.getElementById('revenueChart');
-    const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 290);
-    gradient.addColorStop(0, 'rgba(42,120,214,0.22)');
-    gradient.addColorStop(1, 'rgba(42,120,214,0)');
-    const revenue = new Chart(ctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{ data: [], counts: [], borderColor: SERIES, borderWidth: 2, backgroundColor: gradient,
-                fill: true, tension: 0.35, pointRadius: 3, pointHoverRadius: 6, pointBackgroundColor: SERIES,
-                pointBorderColor: '#fff', pointBorderWidth: 2 }] },
-        options: {
-            interaction: { mode: 'index', intersect: false },
-            plugins: { tooltip: { callbacks: { label: c => `${kes(c.parsed.y)} · ${c.dataset.counts[c.dataIndex]} sales` } } },
-            scales: { y: valueAxis, x: catAxis },
-        },
-    });
-    window.dashRevenue = function (days) {
-        revenue.data.labels = data.labels.slice(-days);
-        revenue.data.datasets[0].data = data.revenue.slice(-days);
-        revenue.data.datasets[0].counts = data.counts.slice(-days);
-        revenue.update();
-    };
-    window.dashRevenue(14);
-
-    const top = document.getElementById('topChart');
-    if (top) {
-        new Chart(top, {
-            type: 'bar',
-            data: { labels: data.top_labels, datasets: [{ data: data.top_revenue, backgroundColor: SERIES, borderRadius: 4,
-                    borderSkipped: 'start', barPercentage: 0.7, categoryPercentage: 0.8 }] },
-            options: { indexAxis: 'y', plugins: { tooltip: { callbacks: { label: c => kes(c.parsed.x) } } },
-                       scales: { x: valueAxis, y: catAxis } },
-        });
-    }
-})();
-</script>
+<script src="{% static 'js/dashboard.js' %}"></script>
 {% endblock %}
