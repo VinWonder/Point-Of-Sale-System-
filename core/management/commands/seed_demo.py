@@ -169,6 +169,7 @@ class Command(BaseCommand):
         account_customers = [c for c in customers if c.credit_limit and not c.is_defaulter]
 
         self.generate_history(days, [main, west], users, products, account_customers, owner)
+        self.generate_documents(users, products, account_customers)
 
     def generate_history(self, days, branches, users, products, account_customers, owner):
         now = timezone.now()
@@ -198,11 +199,88 @@ class Command(BaseCommand):
                     sale_count += 1
             if day_offset % 7 == 0:
                 for branch in branches:
-                    Expense.objects.create(branch=branch, category='LOADING', description='Offloading delivery lorry',
-                                           amount=random.choice([500, 800, 1200]), recorded_by=owner)
+                    expense = Expense.objects.create(branch=branch, category='LOADING', description='Offloading delivery lorry',
+                                                     amount=random.choice([500, 800, 1200]), recorded_by=owner)
+                    Expense.objects.filter(pk=expense.pk).update(created_at=day)
         for customer in account_customers[:2]:
             customer.refresh_from_db()
             if customer.balance_owed > 1000:
                 record_debt_payment(customer, (customer.balance_owed / 2).quantize(Decimal('1')), owner,
                                     method='MPESA', reference='QDEMO12345')
         self.stdout.write(f'Generated {sale_count} historical sales.')
+
+    def generate_documents(self, users, products, account_customers):
+        """Quotations and invoices in every state, so the documents and dashboard look lived-in."""
+        from sales.invoices import create_invoice
+        from sales.models import Quotation
+        from sales.quotations import save_quotation
+
+        now = timezone.now()
+        today = timezone.localdate()
+        # A month of credit sales has used up most limits; give account customers room for new invoices.
+        for customer in account_customers:
+            customer.refresh_from_db()
+            customer.credit_limit = customer.balance_owed + Decimal('150000')
+            customer.save(update_fields=['credit_limit'])
+        walk_ins = [('Mzee Otieno', '0722410233'), ('Mama Akinyi', '0711502876'), ('Kamau Builders', '0733190455'),
+                    ('Fundi Joseph', '0700678120'), ('Wanjiru Hardware Agent', '0745003311')]
+
+        def lines(n, branch):
+            """Items actually in stock at the branch, in quantities it can supply."""
+            from inventory.models import Stock
+            stock = dict(Stock.objects.filter(branch=branch, quantity__gte=6).values_list('product_id', 'quantity'))
+            pool = [p for p in products if p.pk in stock]
+            return [{'product_id': p.pk, 'qty': min(random.choice([2, 5, 10, 20]), stock[p.pk] // 3)}
+                    for p in random.sample(pool, min(n, len(pool)))]
+
+        quotes = []
+        for i in range(10):
+            user = random.choice([users['cashier1'], users['manager'], users['cashier2']])
+            name, phone = random.choice(walk_ins)
+            customer = random.choice(account_customers) if i % 3 == 0 else None
+            try:
+                q = save_quotation(user=user, raw_items=lines(random.randint(2, 5), user.branch), customer=customer,
+                                   customer_name='' if customer else name, customer_phone='' if customer else phone)
+            except SaleError as exc:
+                self.stdout.write(f'  skipped a quotation: {exc}')
+                continue
+            age = random.randint(0, 12)
+            Quotation.objects.filter(pk=q.pk).update(created_at=now - timedelta(days=age, hours=random.randint(0, 8)),
+                                                     valid_until=today - timedelta(days=age) + timedelta(days=14))
+            quotes.append(q)
+        # A few quotes go stale, a few are accepted and invoiced.
+        for q in quotes[:2]:
+            Quotation.objects.filter(pk=q.pk).update(valid_until=today - timedelta(days=3))
+        for q in quotes[2:4]:
+            Quotation.objects.filter(pk=q.pk).update(valid_until=today + timedelta(days=2))
+        for q in quotes[4:7]:
+            q.refresh_from_db()
+            try:
+                sale = create_invoice(
+                    user=q.created_by, payment_method='CREDIT' if q.customer else 'CASH', customer=q.customer,
+                    customer_name=q.customer_name, customer_phone=q.customer_phone, quotation=q,
+                    raw_items=[{'product_id': i.product_id, 'qty': i.quantity, 'unit_price': str(i.unit_price)}
+                               for i in q.items.all()],
+                )
+            except SaleError as exc:
+                self.stdout.write(f'  skipped invoicing {q.reference}: {exc}')
+                continue
+            Quotation.objects.filter(pk=q.pk).update(status=Quotation.Status.CONVERTED)
+
+        # Invoices on account: some current, some overdue, one paid.
+        invoices = []
+        for customer in account_customers:
+            try:
+                invoices.append(create_invoice(user=users['manager'], payment_method='CREDIT', customer=customer,
+                                               raw_items=lines(2, users['manager'].branch), due_days=random.choice([14, 30])))
+            except SaleError as exc:
+                self.stdout.write(f'  skipped an invoice for {customer}: {exc}')
+                continue
+        for sale in invoices[:2]:
+            Sale.objects.filter(pk=sale.pk).update(
+                created_at=now - timedelta(days=40), due_date=today - timedelta(days=random.randint(3, 10)))
+        if len(invoices) > 2:
+            paid = invoices[2]
+            paid.refresh_from_db()
+            record_debt_payment(paid.customer, paid.balance_due, users['owner'], method='MPESA', reference='QPAID7781')
+        self.stdout.write(f'Generated {len(quotes)} quotations and {len(invoices)} invoices.')
