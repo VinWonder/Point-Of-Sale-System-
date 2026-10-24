@@ -535,3 +535,71 @@ class QuotationExtrasTests(SaleTestMixin, TestCase):
         self.assertEqual(new.items.get().unit_price, Decimal('150.00'))
         self.assertEqual(new.client_name, 'Akinyi')
         self.assertEqual(new.number, q.number + 1)
+
+
+class InvoiceServiceTests(SaleTestMixin, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.customer = Customer.objects.create(name='Otieno Builders', phone_number='254711000222',
+                                                credit_limit=20000)
+
+    def invoice(self, **kw):
+        from .invoices import create_invoice
+        kw.setdefault('raw_items', [{'product_id': self.cement.pk, 'qty': 2}])
+        kw.setdefault('payment_method', 'CREDIT')
+        kw.setdefault('customer', self.customer)
+        return create_invoice(user=kw.pop('user', self.cashier), **kw)
+
+    def test_credit_invoice_numbered_with_due_date(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        sale = self.invoice(due_days=14)
+        self.assertEqual(sale.invoice_reference, 'INV-0001')
+        self.assertEqual(sale.due_date, timezone.localdate() + timedelta(days=14))
+        self.assertEqual(sale.sale_type, Sale.SaleType.CREDIT)
+        self.assertEqual(self.stock_of(self.cement), 48)
+        self.customer.refresh_from_db()
+        self.assertEqual(self.customer.balance_owed, Decimal('1600.00'))
+
+    def test_default_terms_from_settings(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.assertEqual(self.invoice().due_date, timezone.localdate() + timedelta(days=30))
+
+    def test_numbers_run_in_sequence(self):
+        refs = [self.invoice().invoice_reference for _ in range(3)]
+        self.assertEqual(refs, ['INV-0001', 'INV-0002', 'INV-0003'])
+
+    def test_cash_invoice_due_today_and_paid(self):
+        from django.utils import timezone
+        sale = self.invoice(payment_method='CASH', customer=None, customer_name='Mzee Otieno',
+                            cash_tendered='2000')
+        self.assertEqual(sale.due_date, timezone.localdate())
+        self.assertEqual(sale.payment_status, Sale.PaymentStatus.PAID)
+        self.assertEqual(sale.client_name, 'Mzee Otieno')
+        self.assertFalse(sale.is_overdue)
+
+    def test_credit_needs_registered_customer(self):
+        with self.assertRaises(SaleError):
+            self.invoice(customer=None, customer_name='Walk-in Kamau')
+        self.assertFalse(Sale.objects.exists())
+
+    def test_negotiated_price_rules_apply(self):
+        sale = self.invoice(raw_items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '770'}])
+        self.assertEqual(sale.total, Decimal('770.00'))
+        with self.assertRaises(SaleError):
+            self.invoice(raw_items=[{'product_id': self.cement.pk, 'qty': 1, 'unit_price': '600'}])
+
+    def test_overdue(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        sale = self.invoice()
+        sale.due_date = timezone.localdate() - timedelta(days=1)
+        self.assertTrue(sale.is_overdue)
+
+    def test_issue_invoice_is_idempotent(self):
+        from .invoices import issue_invoice
+        sale = self.sell([{'product_id': self.nails.pk, 'qty': 1}])
+        first = issue_invoice(sale)
+        again = issue_invoice(sale)
+        self.assertEqual(first.invoice_number, again.invoice_number)

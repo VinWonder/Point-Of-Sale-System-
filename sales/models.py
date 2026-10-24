@@ -69,6 +69,17 @@ class Quotation(models.Model):
         return f"{self.reference} - {self.client_name}"
 
 
+def next_invoice_number():
+    """Next INV number; same locking approach as quotations."""
+    from django.db import transaction
+    from django.db.models import Max
+    from core.models import ShopSettings
+
+    with transaction.atomic():
+        ShopSettings.objects.select_for_update().get_or_create(pk=1)
+        return (Sale.objects.aggregate(m=Max("invoice_number"))["m"] or 0) + 1
+
+
 def next_quotation_number():
     """
     Next number in the 1, 2, 3... sequence. Locks the single settings row so
@@ -113,6 +124,11 @@ class Sale(models.Model):
         CREDIT = "CREDIT", "On account"
 
     quotation = models.ForeignKey(Quotation, on_delete=models.SET_NULL, null=True, blank=True)
+    invoice_number = models.PositiveIntegerField(
+        unique=True, null=True, blank=True, editable=False,
+        help_text="Set when a formal invoice is issued: INV-0001, INV-0002...",
+    )
+    due_date = models.DateField(null=True, blank=True, help_text="When an invoice must be paid")
     customer = models.ForeignKey("customers.Customer", on_delete=models.SET_NULL, null=True, blank=True)
     customer_name = models.CharField(max_length=150, blank=True, help_text="Walk-in customer's name, if given")
     customer_phone = models.CharField(max_length=20, blank=True)
@@ -146,6 +162,17 @@ class Sale(models.Model):
     @property
     def receipt_number(self):
         return f"R{self.branch_id:02d}-{self.pk:06d}" if self.pk else ""
+
+    @property
+    def invoice_reference(self):
+        return f"INV-{self.invoice_number:04d}" if self.invoice_number else ""
+
+    @property
+    def is_overdue(self):
+        return bool(
+            self.due_date and self.due_date < timezone.localdate()
+            and self.balance_due > 0 and self.status != self.Status.VOIDED
+        )
 
     @property
     def client_name(self):
