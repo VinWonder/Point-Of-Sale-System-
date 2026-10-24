@@ -31,6 +31,10 @@ class ShopSettings(models.Model):
         help_text="Largest discount a cashier may give without a manager.",
     )
     quotation_validity_days = models.PositiveIntegerField(default=14)
+    monthly_sales_target = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0.00"),
+        help_text="Sales goal for the whole business each month, shown on the dashboard (0 = no target).",
+    )
     # --- Invoices: how customers pay, printed at the bottom of every invoice ---
     mpesa_paybill = models.CharField("M-Pesa Paybill", max_length=20, blank=True)
     mpesa_paybill_account = models.CharField(
