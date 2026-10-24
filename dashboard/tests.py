@@ -113,3 +113,26 @@ class ReportViewTests(MetricsTestBase):
     def test_cashier_dashboard_hides_profit(self):
         self.client.force_login(self.cashier)
         self.assertNotContains(self.client.get(reverse('dashboard:index')), 'Gross profit today')
+
+
+class DashboardAttentionTests(MetricsTestBase):
+    def test_overdue_invoice_and_money_in_today(self):
+        from datetime import timedelta
+        from sales.invoices import create_invoice
+        customer = Customer.objects.create(name='Late Payer', phone_number='254799', credit_limit=10000)
+        sale = create_invoice(user=self.owner, raw_items=[{'product_id': self.pipe.pk, 'qty': 2}],
+                              payment_method='CREDIT', customer=customer)
+        Sale.objects.filter(pk=sale.pk).update(due_date=self.today - timedelta(days=5))
+        self.sell(1)                                   # 500 cash in today
+        self.client.force_login(self.owner)
+        ctx = self.client.get(reverse('dashboard:index')).context
+        titles = [a['title'] for a in ctx['attention']]
+        self.assertIn('1 overdue invoice', titles)
+        self.assertEqual(ctx['collected_today'], Decimal('500.00'))
+        self.assertEqual(ctx['unpaid_invoices'], 1)
+        self.assertEqual(ctx['unpaid_invoice_balance'], Decimal('1000.00'))
+
+    def test_all_clear_when_nothing_pending(self):
+        Stock.objects.update(quantity=100)
+        self.client.force_login(self.owner)
+        self.assertContains(self.client.get(reverse('dashboard:index')), 'All clear')
