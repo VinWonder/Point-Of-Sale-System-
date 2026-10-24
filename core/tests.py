@@ -21,6 +21,21 @@ class MoneyFilterTests(TestCase):
         self.assertEqual(money('abc'), 'abc')
 
 
+class MoneyShortTests(TestCase):
+    def test_compact_amounts(self):
+        from .templatetags.pos_tags import money_short
+        self.assertEqual(money_short(2_500_000), 'KES 2.5M')
+        self.assertEqual(money_short(898_315), 'KES 898K')
+        self.assertEqual(money_short(1_250_000), 'KES 1.25M')
+        self.assertEqual(money_short(7540), 'KES 7,540')
+        self.assertEqual(money_short(-15000), '-KES 15K')
+
+    def test_money_whole(self):
+        from .templatetags.pos_tags import money_whole
+        self.assertEqual(money_whole(Decimal('753970.50')), 'KES 753,970')
+        self.assertEqual(money_whole(1999.5), 'KES 2,000')
+
+
 class ShopSettingsTests(TestCase):
     def test_singleton(self):
         ShopSettings.load()
@@ -101,7 +116,7 @@ class LogoUploadTests(TestCase):
 
     def post(self, upload, **extra):
         data = {'business_name': 'Jenga Hardware', 'show_logo': 'on', 'vat_rate': '16',
-                'max_cashier_discount_percent': '5', 'quotation_validity_days': '14', 'invoice_due_days': '30',
+                'max_cashier_discount_percent': '5', 'quotation_validity_days': '14', 'invoice_due_days': '30', 'monthly_sales_target': '0',
                 'logo_upload': upload}
         data.update(extra)
         return self.client.post(reverse('core:settings'), data)

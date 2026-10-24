@@ -17,6 +17,34 @@ def money(value, currency='KES'):
 
 
 @register.filter
+def money_whole(value, currency='KES'):
+    """Whole shillings for headline numbers: 753970.5 -> 'KES 753,971'."""
+    try:
+        amount = Decimal(value or 0)
+    except (InvalidOperation, TypeError, ValueError):
+        return value
+    sign = '-' if amount < 0 else ''
+    return f"{sign}{currency} {abs(amount):,.0f}"
+
+
+@register.filter
+def money_short(value, currency='KES'):
+    """Compact money for tight spaces: 2500000 -> 'KES 2.5M', 695470 -> 'KES 695K'."""
+    try:
+        amount = Decimal(value or 0)
+    except (InvalidOperation, TypeError, ValueError):
+        return value
+    sign, amount = ('-' if amount < 0 else ''), abs(amount)
+    if amount >= 1_000_000:
+        text = f"{amount / 1_000_000:.2f}".rstrip('0').rstrip('.') + 'M'
+    elif amount >= 10_000:
+        text = f"{amount / 1000:.0f}K"
+    else:
+        text = f"{amount:,.0f}"
+    return f"{sign}{currency} {text}"
+
+
+@register.filter
 def intcomma_plain(value):
     try:
         return f"{int(value):,}"
