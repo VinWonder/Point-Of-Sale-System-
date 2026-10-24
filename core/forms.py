@@ -17,6 +17,9 @@ class ShopSettingsForm(forms.ModelForm):
             'business_name', 'show_logo', 'tagline', 'kra_pin', 'phone_number', 'email', 'address',
             'vat_rate', 'receipt_footer', 'max_cashier_discount_percent',
             'quotation_validity_days', 'require_open_shift',
+            'mpesa_paybill', 'mpesa_paybill_account', 'mpesa_till',
+            'bank_name', 'bank_account_name', 'bank_account_number', 'bank_branch',
+            'invoice_due_days', 'invoice_terms',
         )
 
     def clean_vat_rate(self):

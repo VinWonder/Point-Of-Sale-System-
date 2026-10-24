@@ -100,7 +100,8 @@ class LogoUploadTests(TestCase):
 
     def post(self, upload, **extra):
         data = {'business_name': 'Jenga Hardware', 'show_logo': 'on', 'vat_rate': '16',
-                'max_cashier_discount_percent': '5', 'quotation_validity_days': '14', 'logo_upload': upload}
+                'max_cashier_discount_percent': '5', 'quotation_validity_days': '14', 'invoice_due_days': '30',
+                'logo_upload': upload}
         data.update(extra)
         return self.client.post(reverse('core:settings'), data)
 

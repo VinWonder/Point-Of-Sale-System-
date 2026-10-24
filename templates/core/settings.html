@@ -41,6 +41,24 @@
                     {{ form.require_open_shift|as_crispy_field }}
                 </div>
             </div>
+            <div class="card mt-3">
+                <div class="card-header">Invoices &amp; payment details <span class="text-muted small fw-normal">— printed on every invoice</span></div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">{{ form.mpesa_paybill|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.mpesa_paybill_account|as_crispy_field }}</div>
+                    </div>
+                    {{ form.mpesa_till|as_crispy_field }}
+                    <div class="row">
+                        <div class="col-md-6">{{ form.bank_name|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.bank_branch|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.bank_account_name|as_crispy_field }}</div>
+                        <div class="col-md-6">{{ form.bank_account_number|as_crispy_field }}</div>
+                    </div>
+                    {{ form.invoice_due_days|as_crispy_field }}
+                    {{ form.invoice_terms|as_crispy_field }}
+                </div>
+            </div>
             <button class="btn btn-accent btn-lg mt-3 w-100">Save settings</button>
         </div>
     </div>

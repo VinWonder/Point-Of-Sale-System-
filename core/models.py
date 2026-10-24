@@ -31,6 +31,24 @@ class ShopSettings(models.Model):
         help_text="Largest discount a cashier may give without a manager.",
     )
     quotation_validity_days = models.PositiveIntegerField(default=14)
+    # --- Invoices: how customers pay, printed at the bottom of every invoice ---
+    mpesa_paybill = models.CharField("M-Pesa Paybill", max_length=20, blank=True)
+    mpesa_paybill_account = models.CharField(
+        "Paybill account", max_length=60, blank=True,
+        help_text="What customers enter as the account, e.g. 'Invoice number' or your shop name",
+    )
+    mpesa_till = models.CharField("M-Pesa Buy Goods till", max_length=20, blank=True)
+    bank_name = models.CharField(max_length=100, blank=True)
+    bank_account_name = models.CharField(max_length=150, blank=True)
+    bank_account_number = models.CharField(max_length=50, blank=True)
+    bank_branch = models.CharField(max_length=100, blank=True)
+    invoice_due_days = models.PositiveIntegerField(
+        default=30, help_text="Default payment period for invoices on account (0 = due on receipt).",
+    )
+    invoice_terms = models.CharField(
+        max_length=255, blank=True,
+        default="Payment is due by the date shown. Goods remain the property of the seller until paid in full.",
+    )
     require_open_shift = models.BooleanField(
         default=False, help_text="Cashiers must open a till shift (with a float) before they can sell.",
     )
@@ -45,6 +63,10 @@ class ShopSettings(models.Model):
     def save(self, *args, **kwargs):
         self.pk = 1
         super().save(*args, **kwargs)
+
+    @property
+    def has_payment_details(self):
+        return any([self.mpesa_paybill, self.mpesa_till, self.bank_account_number])
 
     @classmethod
     def load(cls):
